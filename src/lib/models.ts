@@ -93,6 +93,29 @@ function boolField(raw: Record<string, unknown>, keys: string[]): boolean {
   return false;
 }
 
+/**
+ * OpenRouter's live catalog prices via a `pricing_skus` map whose keys vary
+ * per provider (flat per-second rates in dollars, cents-denominated rates,
+ * or per-token/per-megapixel rates that aren't expressible as $/s at all).
+ * We surface the cheapest genuinely per-second SKU as a "from" price and
+ * ignore per-token, per-image, and per-generation SKUs since they can't be
+ * converted to $/s without knowing token/image counts.
+ */
+function derivePricePerSecond(raw: Record<string, unknown>): number | undefined {
+  const skus = raw.pricing_skus as Record<string, string> | undefined;
+  if (!skus || typeof skus !== "object") return undefined;
+
+  let min: number | undefined;
+  for (const [key, value] of Object.entries(skus)) {
+    if (!key.includes("second") || key.includes("megapixel")) continue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) continue;
+    const perSecond = key.startsWith("cents_") ? n / 100 : n;
+    if (min === undefined || perSecond < min) min = perSecond;
+  }
+  return min;
+}
+
 /** Tolerates minor field-naming drift in OpenRouter's live catalog response. */
 export function normalizeModel(raw: Record<string, unknown>): VideoModel {
   const id = String(raw.id ?? raw.model ?? "");
@@ -116,7 +139,9 @@ export function normalizeModel(raw: Record<string, unknown>): VideoModel {
       "supported_input_references",
     ]),
     price_per_second:
-      typeof raw.price_per_second === "number" ? raw.price_per_second : undefined,
+      typeof raw.price_per_second === "number"
+        ? raw.price_per_second
+        : derivePricePerSecond(raw),
   };
 }
 

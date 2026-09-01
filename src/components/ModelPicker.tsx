@@ -51,7 +51,7 @@ export function ModelPicker({
         </span>
         {value?.price_per_second != null && (
           <span className="text-[10px] font-mono text-fg-faint whitespace-nowrap">
-            ${value.price_per_second.toFixed(4)}/s
+            from ${value.price_per_second.toFixed(4)}/s
           </span>
         )}
       </button>
@@ -83,7 +83,7 @@ export function ModelPicker({
                   </span>
                   {m.price_per_second != null && (
                     <span className="text-[10px] font-mono text-fg-faint whitespace-nowrap">
-                      ${m.price_per_second.toFixed(4)}/s
+                      from ${m.price_per_second.toFixed(4)}/s
                     </span>
                   )}
                 </button>
