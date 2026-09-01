@@ -1,17 +1,24 @@
 # Todo
 
 ## Stage (3D room prototype) — in progress
-r3f + drei + rapier playground at `/stage`, linked from the header's "Go to
-studio" button. A small physics room: floor + backdrop wall, two decorative
+r3f + drei playground at `/stage`, linked from the header's "Go to studio"
+button. A small static room: floor + backdrop wall, two decorative
 softbox-on-a-stand light props (inspired by a studio-lighting diagram),
-OrbitControls camera, and a handful of boxes/spheres that drop and stack via
-`@react-three/rapier`. "Reset stack" re-drops a fresh set.
+OrbitControls camera, and a handful of boxes/spheres sitting at fixed
+positions.
+
+Physics (`@react-three/rapier`) was tried — drop-and-stack simulation, plus a
+drag-to-place/pin-with-toothpick interaction — but didn't serve the actual
+goal (props need to *stay put*, not tumble), so it's parked on the
+`stage-physics` branch rather than carried forward. The plan instead: a
+translate gizmo (arrow/plane handles, drag along an axis or a 2-axis plane)
+for repositioning props by hand, design notes at
+https://rystorm.com/blog/translate-gizmo-design.
 
 Deliberately simple for the prototype phase — no true curved cove backdrop
 (flat wall + floor instead), no HDRI environment, light props are static
 decoration (the actual illumination comes from real spotLights at the same
-position). Next steps if it's worth continuing: curved cove geometry, nicer
-prop materials/shadows, maybe let dropped shapes be picked/dragged.
+position).
 
 ## Auditorium mode (future, for fun)
 A PVR / IMAX-style viewing mode for reviewing a completed take: dim the rest

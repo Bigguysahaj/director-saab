@@ -1,34 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, ContactShadows } from "@react-three/drei";
-import { Physics, RigidBody } from "@react-three/rapier";
 
 const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
+const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
 
-type Prop = {
+type PropData = {
   id: number;
   shape: "box" | "ball";
   position: [number, number, number];
   color: string;
 };
 
-const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
-
-function spawnStack(seedOffset: number): Prop[] {
-  return Array.from({ length: 6 }, (_, i) => ({
-    id: seedOffset + i,
-    shape: i % 2 === 0 ? "box" : "ball",
-    position: [
-      (Math.random() - 0.5) * 1.2,
-      2 + i * 1.1,
-      (Math.random() - 0.5) * 1.2,
-    ],
-    color: PALETTE[i % PALETTE.length],
-  }));
-}
+// Static layout — no physics. Y is each shape's own half-height/radius so
+// it sits flush on the floor (boxes are 0.8 side, balls are 0.5 radius).
+const PROPS: PropData[] = [
+  { id: 0, shape: "box", position: [-1.4, 0.4, 0.6], color: PALETTE[0] },
+  { id: 1, shape: "ball", position: [-0.4, 0.5, -0.5], color: PALETTE[1] },
+  { id: 2, shape: "box", position: [0.5, 0.4, 0.8], color: PALETTE[2] },
+  { id: 3, shape: "ball", position: [1.4, 0.5, -0.2], color: PALETTE[3] },
+  { id: 4, shape: "box", position: [-0.9, 0.4, -1.2], color: PALETTE[4] },
+  { id: 5, shape: "ball", position: [0.9, 0.5, 1.1], color: PALETTE[0] },
+];
 
 /** A softbox-on-a-stand prop — decorative only, not physics-simulated. */
 function LightStand({
@@ -62,21 +57,16 @@ function LightStand({
   );
 }
 
-function Prop({ shape, position, color }: Prop) {
+function Prop({ shape, position, color }: PropData) {
   return (
-    <RigidBody position={position} colliders={shape === "box" ? "cuboid" : "ball"} restitution={0.15} friction={0.8}>
-      <mesh castShadow receiveShadow>
-        {shape === "box" ? <boxGeometry args={[0.8, 0.8, 0.8]} /> : <sphereGeometry args={[0.5, 32, 32]} />}
-        <meshStandardMaterial color={color} roughness={0.5} metalness={0.05} />
-      </mesh>
-    </RigidBody>
+    <mesh position={position} castShadow receiveShadow>
+      {shape === "box" ? <boxGeometry args={[0.8, 0.8, 0.8]} /> : <sphereGeometry args={[0.5, 32, 32]} />}
+      <meshStandardMaterial color={color} roughness={0.5} metalness={0.05} />
+    </mesh>
   );
 }
 
 export function StageScene() {
-  const [generation, setGeneration] = useState(0);
-  const props = useMemo(() => spawnStack(generation * 100), [generation]);
-
   return (
     <div className="relative h-full w-full">
       <Canvas shadows dpr={[1, 2]} className="!absolute inset-0">
@@ -89,36 +79,23 @@ export function StageScene() {
         <LightStand position={[-3, 0, 1.5]} rotationY={0.6} />
         <LightStand position={[3, 0, 1.5]} rotationY={-0.6} />
 
-        <Physics gravity={[0, -9.81, 0]}>
-          {/* backdrop wall */}
-          <RigidBody type="fixed">
-            <mesh position={[0, 4, -3]} receiveShadow>
-              <boxGeometry args={[12, 8, 0.2]} />
-              <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
-            </mesh>
-          </RigidBody>
-          {/* floor */}
-          <RigidBody type="fixed">
-            <mesh position={[0, 0, 0]} receiveShadow>
-              <boxGeometry args={[12, 0.2, 8]} />
-              <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
-            </mesh>
-          </RigidBody>
+        {/* backdrop wall */}
+        <mesh position={[0, 4, -3]} receiveShadow>
+          <boxGeometry args={[12, 8, 0.2]} />
+          <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+        </mesh>
+        {/* floor */}
+        <mesh position={[0, 0, 0]} receiveShadow>
+          <boxGeometry args={[12, 0.2, 8]} />
+          <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+        </mesh>
 
-          {props.map((p) => (
-            <Prop key={p.id} {...p} />
-          ))}
-        </Physics>
+        {PROPS.map((p) => (
+          <Prop key={p.id} {...p} />
+        ))}
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
-
-      <button
-        onClick={() => setGeneration((g) => g + 1)}
-        className="absolute bottom-6 left-6 rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-      >
-        Reset stack
-      </button>
     </div>
   );
 }
