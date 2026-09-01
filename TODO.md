@@ -10,10 +10,14 @@ positions.
 Physics (`@react-three/rapier`) was tried — drop-and-stack simulation, plus a
 drag-to-place/pin-with-toothpick interaction — but didn't serve the actual
 goal (props need to *stay put*, not tumble), so it's parked on the
-`stage-physics` branch rather than carried forward. The plan instead: a
-translate gizmo (arrow/plane handles, drag along an axis or a 2-axis plane)
-for repositioning props by hand, design notes at
-https://rystorm.com/blog/translate-gizmo-design.
+`stage-physics` branch rather than carried forward.
+
+Repositioning is now via a translate gizmo instead: click a prop to select it
+(shows arrow + 2-axis plane handles, drag snaps to a 0.25 grid, live X/Y/Z
+readout bottom-right), click empty space to deselect. Uses drei's
+`TransformControls` as-is — its plane handles already mirror themselves to
+whichever side is camera-facing as you orbit, no custom code needed for that.
+Design notes: https://rystorm.com/blog/translate-gizmo-design.
 
 Deliberately simple for the prototype phase — no true curved cove backdrop
 (flat wall + floor instead), no HDRI environment, light props are static
