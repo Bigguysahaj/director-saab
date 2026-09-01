@@ -13,8 +13,8 @@ goal (props need to *stay put*, not tumble), so it's parked on the
 `stage-physics` branch rather than carried forward.
 
 Repositioning is now via a translate gizmo instead: click a prop to select it
-(shows arrow + 2-axis plane handles, drag snaps to a 0.25 grid, live X/Y/Z
-readout bottom-right), click empty space to deselect. Uses drei's
+(shows arrow + 2-axis plane handles, free drag with a live X/Y/Z readout
+bottom-right), click empty space to deselect. Uses drei's
 `TransformControls` as-is — its plane handles already mirror themselves to
 whichever side is camera-facing as you orbit, no custom code needed for that.
 Design notes: https://rystorm.com/blog/translate-gizmo-design.

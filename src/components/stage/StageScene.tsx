@@ -9,10 +9,6 @@ const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
 const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
 
-// Round dragged positions to the nearest 1/4 unit — makes props easy to
-// line up by eye without needing exact pixel-perfect drops.
-const GRID_SNAP = 0.25;
-
 type PropData = {
   id: number;
   shape: "box" | "ball";
@@ -160,12 +156,7 @@ export function StageScene() {
         ))}
 
         {selectedMesh && (
-          <TransformControls
-            object={selectedMesh}
-            mode="translate"
-            translationSnap={GRID_SNAP}
-            onObjectChange={syncSelectedPosition}
-          />
+          <TransformControls object={selectedMesh} mode="translate" onObjectChange={syncSelectedPosition} />
         )}
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
