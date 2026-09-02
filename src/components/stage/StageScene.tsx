@@ -128,11 +128,14 @@ function LightStand({ id, position, rotation, selected, onSelect, objRef }: Item
   );
 }
 
-/** A simple camera-shaped marker prop — selectable and movable like anything
- * else, purely decorative (no viewfinder feature yet). */
-function CameraMarker({ id, position, rotation, selected, onSelect, objRef }: ItemProps & {
+/** A simple camera-shaped marker. Its own PerspectiveCamera becomes the
+ * active view while "looking through" it — a full viewport swap (not a
+ * picture-in-picture), so the main camera and OrbitControls step aside
+ * while this one is active. */
+function CameraMarker({ id, position, rotation, selected, onSelect, objRef, lookingThrough }: ItemProps & {
   position: Vec3;
   rotation: Vec3;
+  lookingThrough: boolean;
 }) {
   return (
     <group
@@ -144,19 +147,24 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef }: It
         onSelect(id);
       }}
     >
-      <mesh castShadow>
-        <boxGeometry args={[0.35, 0.25, 0.3]} />
-        <meshStandardMaterial
-          color="#1c1c1a"
-          roughness={0.4}
-          emissive={selected ? "#ffffff" : "#000000"}
-          emissiveIntensity={selected ? 0.2 : 0}
-        />
-      </mesh>
-      <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <coneGeometry args={[0.12, 0.22, 16]} />
-        <meshStandardMaterial color="#333330" roughness={0.3} metalness={0.4} />
-      </mesh>
+      {/* body + lens, hidden while looking through this camera's own view */}
+      <group visible={!lookingThrough}>
+        <mesh castShadow>
+          <boxGeometry args={[0.35, 0.25, 0.3]} />
+          <meshStandardMaterial
+            color="#1c1c1a"
+            roughness={0.4}
+            emissive={selected ? "#ffffff" : "#000000"}
+            emissiveIntensity={selected ? 0.2 : 0}
+          />
+        </mesh>
+        <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <coneGeometry args={[0.12, 0.22, 16]} />
+          <meshStandardMaterial color="#333330" roughness={0.3} metalness={0.4} />
+        </mesh>
+      </group>
+      {/* PerspectiveCamera looks down local -Z by default, same direction the lens cone points */}
+      <PerspectiveCamera makeDefault={lookingThrough} fov={50} />
     </group>
   );
 }
@@ -166,10 +174,11 @@ type SceneContentsProps = {
   selectedId: number | null;
   onSelect: (id: number) => void;
   objRef: (id: number, obj: THREE.Object3D | null) => void;
+  lookingThroughId: number | null;
 };
 
 /** The room shell (lights, walls, floor) plus every scene object. */
-function SceneContents({ objects, selectedId, onSelect, objRef }: SceneContentsProps) {
+function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId }: SceneContentsProps) {
   return (
     <>
       <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
@@ -204,7 +213,15 @@ function SceneContents({ objects, selectedId, onSelect, objRef }: SceneContentsP
         if (o.kind === "light") {
           return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
         }
-        return <CameraMarker key={o.id} {...common} position={o.position} rotation={o.rotation} />;
+        return (
+          <CameraMarker
+            key={o.id}
+            {...common}
+            position={o.position}
+            rotation={o.rotation}
+            lookingThrough={o.id === lookingThroughId}
+          />
+        );
       })}
     </>
   );
@@ -252,6 +269,7 @@ export function StageScene() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">("translate");
   const [newSize, setNewSize] = useState(0.8);
+  const [lookingThrough, setLookingThrough] = useState(false);
 
   const nodes = useRef(new Map<number, THREE.Object3D>());
   const setObjRef = (id: number, obj: THREE.Object3D | null) => {
@@ -301,6 +319,7 @@ export function StageScene() {
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
+  const lookingThroughId = lookingThrough && selected?.kind === "camera" ? selected.id : null;
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -345,10 +364,24 @@ export function StageScene() {
     <div className="relative h-full w-full">
       <Canvas shadows dpr={[1, 2]} className="!absolute inset-0" onPointerMissed={() => setSelectedId(null)}>
         <color attach="background" args={[BACKDROP_COLOR]} />
-        <PerspectiveCamera makeDefault position={[3.5, 2.2, 5]} fov={45} />
-        <OrbitControls makeDefault target={[0, 1, 0]} minDistance={3} maxDistance={12} maxPolarAngle={1.5} enableDamping />
+        <PerspectiveCamera makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
+        <OrbitControls
+          makeDefault
+          enabled={!lookingThrough}
+          target={[0, 1, 0]}
+          minDistance={3}
+          maxDistance={12}
+          maxPolarAngle={1.5}
+          enableDamping
+        />
 
-        <SceneContents objects={objects} selectedId={selectedId} onSelect={setSelectedId} objRef={setObjRef} />
+        <SceneContents
+          objects={objects}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          objRef={setObjRef}
+          lookingThroughId={lookingThroughId}
+        />
 
         {selectedNode && (
           <TransformControls
@@ -403,6 +436,23 @@ export function StageScene() {
             + Ball
           </button>
         </div>
+
+        {selected?.kind === "camera" && (
+          <button
+            onClick={() => setLookingThrough((v) => !v)}
+            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+          >
+            {lookingThrough ? "Exit camera view" : "Look through camera"}
+          </button>
+        )}
+        {lookingThrough && selected?.kind !== "camera" && (
+          <button
+            onClick={() => setLookingThrough(false)}
+            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+          >
+            Exit camera view
+          </button>
+        )}
 
         <button
           onClick={resetLayout}
