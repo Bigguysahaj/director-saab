@@ -366,6 +366,13 @@ function HoldMoveAnimator({
   holdRef: React.RefObject<HoldState | null>;
   onSettled: () => void;
 }) {
+  // Reused every frame instead of `new THREE.Vector3()` inside useFrame —
+  // allocating there was GC pressure on every single frame of a held dolly
+  // move (zoom/pan don't allocate anything per frame, which is why only
+  // dolly ever jittered).
+  const dirRef = useRef(new THREE.Vector3());
+  const focusRef = useRef(new THREE.Vector3(0, 1, 0));
+
   useFrame((_, delta) => {
     const hold = holdRef.current;
     const cameraId = cameraIdRef.current;
@@ -399,9 +406,8 @@ function HoldMoveAnimator({
       // Derivation: apparent size ∝ 1 / (distance · tan(fov/2)), so holding
       // that product constant (k, fixed at grab time) gives fov from dist.
       const sign = hold.kind === "dolly-zoom-in" ? -1 : 1;
-      const dir = new THREE.Vector3();
-      camNode.getWorldDirection(dir);
-      const focus = new THREE.Vector3(0, 1, 0);
+      const dir = camNode.getWorldDirection(dirRef.current);
+      const focus = focusRef.current;
       const dist = camNode.position.distanceTo(focus);
       const newDist = THREE.MathUtils.clamp(dist + sign * rate * delta, MIN_DOLLY_DIST, MAX_DOLLY_DIST);
       camNode.position.addScaledVector(dir, dist - newDist);
