@@ -23,18 +23,14 @@ https://rystorm.com/blog/translate-gizmo-design.
 - **Light stands:** move and rotate to re-aim — the spotlight's target is a
   child Object3D of the stand's group (not a fixed world point), so the beam
   actually turns with it.
-- **Camera marker:** move/rotate like anything else, plus a "Show camera
-  view" toggle that opens a picture-in-picture inset (bottom-right) rendering
-  live from that camera's POV via drei's `<View>` portal
-  (https://drei.docs.pmnd.rs/portals/view) — the main viewport stays fully
-  interactive, so you can drag props around and watch the framing update in
-  the inset simultaneously. Mounting a `<View>` switches the whole canvas to
-  manual rendering (any render-priority subscriber does), which would blank
-  the main scene, so a small `KeepMainViewRendering` helper redraws it every
-  frame — it also has to reset the WebGL viewport first, since the PIP's own
-  draw call leaves the viewport pinned to its small rect and that state
-  persists into the next frame otherwise (was rendering the main scene
-  squeezed into the leftover PIP-sized rect — fixed).
+- **Camera marker:** move/rotate like anything else. Purely a placeable prop
+  for now — no viewfinder/preview yet. A picture-in-picture viewer via drei's
+  `<View>` portal (https://drei.docs.pmnd.rs/portals/view) was tried and
+  worked, then pulled back out — user wants to build the actual
+  camera-viewing feature themselves.
+- **Layout persistence:** every change (drag, rotate, add, duplicate)
+  auto-saves to `localStorage`; "Reset layout" clears it and returns to the
+  default arrangement.
 
 Deliberately simple for the prototype phase — no true curved cove backdrop
 (flat wall + floor instead), no HDRI environment.
