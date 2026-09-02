@@ -1,5 +1,11 @@
 import "server-only";
-import type { CreateJobResponse, GenerateRequest, PollJobResponse } from "./types";
+import type {
+  CreateJobResponse,
+  GenerateRequest,
+  ImageGenerateRequest,
+  ImageGenerateResponse,
+  PollJobResponse,
+} from "./types";
 
 const BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -66,4 +72,20 @@ export async function fetchVideoContent(
     throw new Error(`OpenRouter content fetch failed (${res.status})`);
   }
   return res;
+}
+
+/**
+ * Image generation is synchronous and all-or-nothing (unlike the video
+ * jobs above): a call either returns finished images and is billed in
+ * full, or it fails and isn't billed at all — no polling needed.
+ */
+export async function generateImage(
+  body: ImageGenerateRequest
+): Promise<ImageGenerateResponse> {
+  const res = await fetch(`${BASE_URL}/images`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  return unwrap(res, "generate image");
 }

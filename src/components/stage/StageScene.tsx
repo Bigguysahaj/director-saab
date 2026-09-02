@@ -4,6 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
+import {
+  DEFAULT_POSE,
+  KEYFRAME_EPSILON,
+  TIMELINE_DURATION,
+  type JointKey,
+  type SceneObject,
+  type Vec3,
+} from "./types";
+import { deleteKeyframeNear, interpolateTransform, upsertKeyframe } from "./keyframes";
+import { Mannequin } from "./Mannequin";
+import { Timeline } from "./Timeline";
+import { CastPanel } from "./CastPanel";
 
 const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
@@ -11,22 +23,15 @@ const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
 const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
-// are ignored instead of crashing on load.
-const STORAGE_KEY = "director-stage-layout-v1";
+// are ignored instead of crashing on load. v2 adds mannequin `pose` and
+// `keyframes` — both optional, but old saves are dropped anyway per convention.
+const STORAGE_KEY = "director-stage-layout-v2";
 
-type ObjectKind = "box" | "ball" | "light" | "camera" | "mannequin";
-type Vec3 = [number, number, number];
-
-type SceneObject = {
-  id: number;
-  kind: ObjectKind;
-  position: Vec3;
-  rotation: Vec3;
-  color?: string; // box/ball/mannequin only
-  size?: number; // ball radius; box height (Y) and fallback for length/breadth
-  length?: number; // box X dimension — defaults to `size` (a cube) when unset
-  breadth?: number; // box Z dimension — defaults to `size` (a cube) when unset
-  fov?: number; // camera only
+const JOINT_LABELS: Record<JointKey, string> = {
+  leftArm: "Left arm",
+  rightArm: "Right arm",
+  leftLeg: "Left leg",
+  rightLeg: "Right leg",
 };
 
 // Static layout to start from. Y on the box/ball props is each shape's own
@@ -182,68 +187,6 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
   );
 }
 
-/**
- * A plain stand-in figure for blocking out where a person goes — built from
- * primitives (head/torso/arms/legs), not a rig. Posing individual limbs is
- * future work (see TODO.md); for now the whole figure moves/rotates as one
- * selectable unit, feet at the group's local origin so it stands flush on
- * the floor.
- */
-function Mannequin({ id, position, rotation, color, selected, onSelect, objRef }: ItemProps & {
-  position: Vec3;
-  rotation: Vec3;
-  color: string;
-}) {
-  const limbMaterial = (
-    <meshStandardMaterial
-      color={color}
-      roughness={0.6}
-      emissive={selected ? "#ffffff" : "#000000"}
-      emissiveIntensity={selected ? 0.15 : 0}
-    />
-  );
-  return (
-    <group
-      ref={(g) => objRef(id, g)}
-      position={position}
-      rotation={rotation}
-      onClick={(e: ThreeEvent<MouseEvent>) => {
-        e.stopPropagation();
-        onSelect(id);
-      }}
-    >
-      {/* legs */}
-      <mesh position={[-0.12, 0.4, 0]} castShadow>
-        <cylinderGeometry args={[0.08, 0.08, 0.8, 12]} />
-        {limbMaterial}
-      </mesh>
-      <mesh position={[0.12, 0.4, 0]} castShadow>
-        <cylinderGeometry args={[0.08, 0.08, 0.8, 12]} />
-        {limbMaterial}
-      </mesh>
-      {/* torso */}
-      <mesh position={[0, 1.1, 0]} castShadow>
-        <boxGeometry args={[0.4, 0.6, 0.25]} />
-        {limbMaterial}
-      </mesh>
-      {/* arms */}
-      <mesh position={[-0.3, 1.05, 0]} rotation={[0, 0, 0.15]} castShadow>
-        <cylinderGeometry args={[0.06, 0.06, 0.6, 12]} />
-        {limbMaterial}
-      </mesh>
-      <mesh position={[0.3, 1.05, 0]} rotation={[0, 0, -0.15]} castShadow>
-        <cylinderGeometry args={[0.06, 0.06, 0.6, 12]} />
-        {limbMaterial}
-      </mesh>
-      {/* head */}
-      <mesh position={[0, 1.55, 0]} castShadow>
-        <sphereGeometry args={[0.15, 24, 24]} />
-        {limbMaterial}
-      </mesh>
-    </group>
-  );
-}
-
 type SceneContentsProps = {
   objects: SceneObject[];
   selectedId: number | null;
@@ -251,10 +194,32 @@ type SceneContentsProps = {
   objRef: (id: number, obj: THREE.Object3D | null) => void;
   lookingThroughId: number | null;
   cameraRef?: React.Ref<THREE.PerspectiveCamera>;
+  playheadTime: number;
+  poseModeId: number | null;
+  activeJoint: JointKey | null;
+  onSelectJoint: (joint: JointKey) => void;
+  jointRef: (mannequinId: number, joint: JointKey, obj: THREE.Object3D | null) => void;
 };
 
-/** The room shell (lights, walls, floor) plus every scene object. */
-function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId, cameraRef }: SceneContentsProps) {
+/** The room shell (lights, walls, floor) plus every scene object. Box/ball/
+ * mannequin render at their keyframe-interpolated transform when they have
+ * keyframes, falling back to their static position/rotation otherwise —
+ * computed here, declaratively, so there's nothing imperative fighting the
+ * gizmo mid-drag (see the keyframe-aware branch of syncSelectedTransform in
+ * StageScene for why that matters). */
+function SceneContents({
+  objects,
+  selectedId,
+  onSelect,
+  objRef,
+  lookingThroughId,
+  cameraRef,
+  playheadTime,
+  poseModeId,
+  activeJoint,
+  onSelectJoint,
+  jointRef,
+}: SceneContentsProps) {
   return (
     <>
       <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
@@ -273,14 +238,18 @@ function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId
 
       {objects.map((o) => {
         const common = { id: o.id, selected: o.id === selectedId, onSelect, objRef };
+        const kf = o.keyframes?.length ? interpolateTransform(o.keyframes, playheadTime) : null;
+        const displayPosition = kf?.position ?? o.position;
+        const displayRotation = kf?.rotation ?? o.rotation;
+
         if (o.kind === "box" || o.kind === "ball") {
           return (
             <ShapeProp
               key={o.id}
               {...common}
               shape={o.kind}
-              position={o.position}
-              rotation={o.rotation}
+              position={displayPosition}
+              rotation={displayRotation}
               color={o.color ?? PALETTE[0]}
               size={o.size ?? DEFAULT_SIZE[o.kind]}
               length={o.length}
@@ -293,7 +262,18 @@ function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId
         }
         if (o.kind === "mannequin") {
           return (
-            <Mannequin key={o.id} {...common} position={o.position} rotation={o.rotation} color={o.color ?? "#c9b8a0"} />
+            <Mannequin
+              key={o.id}
+              {...common}
+              position={displayPosition}
+              rotation={displayRotation}
+              color={o.color ?? "#c9b8a0"}
+              pose={o.pose}
+              poseMode={o.id === poseModeId}
+              activeJoint={o.id === poseModeId ? activeJoint : null}
+              onSelectJoint={onSelectJoint}
+              jointRef={(joint, obj) => jointRef(o.id, joint, obj)}
+            />
           );
         }
         return (
@@ -434,20 +414,35 @@ function HoldMoveAnimator({
   return null;
 }
 
-/** Bottom-right readout of the selected object's live transform. */
-function TransformReadout({ mode, position, rotation }: { mode: "translate" | "rotate"; position: Vec3; rotation: Vec3 }) {
+/** Advances the timeline playhead while playing. A plain useFrame instead of
+ * a setInterval/rAF loop of its own, and reads isPlaying/duration straight
+ * from props (refreshed every render) rather than a ref, since every
+ * playhead tick already causes a React re-render anyway (the Timeline UI
+ * needs it), so there's no stale-closure concern to dodge here — unlike
+ * HoldMoveAnimator above, which deliberately avoids per-frame React state. */
+function PlaybackDriver({ isPlaying, duration, onFrame }: { isPlaying: boolean; duration: number; onFrame: (delta: number) => void }) {
+  useFrame((_, delta) => {
+    if (!isPlaying) return;
+    onFrame(Math.min(delta, duration));
+  });
+  return null;
+}
+
+/** Bottom-right readout of the selected object's live transform (or, in
+ * Pose mode, the active joint's rotation). */
+function TransformReadout({ mode, position, rotation, label }: { mode: "translate" | "rotate"; position: Vec3; rotation: Vec3; label?: string }) {
   if (mode === "translate") {
     const [x, y, z] = position;
     return (
-      <p className="absolute bottom-6 right-6 text-[10px] uppercase tracking-[0.15em] text-fg-faint">
+      <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">
         x {x.toFixed(2)} · y {y.toFixed(2)} · z {z.toFixed(2)}
       </p>
     );
   }
   const [rx, ry, rz] = rotation.map((r) => THREE.MathUtils.radToDeg(r));
   return (
-    <p className="absolute bottom-6 right-6 text-[10px] uppercase tracking-[0.15em] text-fg-faint">
-      pitch {rx.toFixed(0)}° · yaw {ry.toFixed(0)}° · roll {rz.toFixed(0)}°
+    <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">
+      {label ? `${label} — ` : ""}pitch {rx.toFixed(0)}° · yaw {ry.toFixed(0)}° · roll {rz.toFixed(0)}°
     </p>
   );
 }
@@ -488,18 +483,22 @@ function waitFrames(n: number): Promise<void> {
 export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">("translate");
+  const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate" | "pose">("translate");
+  const [activeJoint, setActiveJoint] = useState<JointKey | null>(null);
   const [newSize, setNewSize] = useState(0.8);
   const [newLength, setNewLength] = useState(0.8);
   const [newBreadth, setNewBreadth] = useState(0.8);
   const [lookingThrough, setLookingThrough] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [castOpen, setCastOpen] = useState(false);
   const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
   const [stopStyle, setStopStyle] = useState<StopStyle>("quad");
   // Mirrors holdRef for UI highlighting only — the physics itself never
   // reads this, so it doesn't need to update every frame.
   const [activeHoldKind, setActiveHoldKind] = useState<MoveKind | null>(null);
+  const [playheadTime, setPlayheadTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -574,6 +573,16 @@ export function StageScene() {
     else nodes.current.delete(id);
   };
 
+  // Keyed `${mannequinId}:${joint}` — a mannequin's own root node lives in
+  // `nodes` above via the same objRef path every other object uses; this map
+  // is only for the four limb-pivot nodes nested inside it.
+  const jointNodes = useRef(new Map<string, THREE.Object3D>());
+  const setJointRef = (mannequinId: number, joint: JointKey, obj: THREE.Object3D | null) => {
+    const key = `${mannequinId}:${joint}`;
+    if (obj) jointNodes.current.set(key, obj);
+    else jointNodes.current.delete(key);
+  };
+
   // Ctrl is tracked on window rather than read from the gizmo's mouse event,
   // since TransformControls' onMouseDown doesn't forward the source PointerEvent.
   const ctrlHeld = useRef(false);
@@ -615,7 +624,7 @@ export function StageScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-save on every change (drag, rotate, add, duplicate).
+  // Auto-save on every change (drag, rotate, pose, keyframe, add, duplicate).
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(objects));
@@ -638,6 +647,10 @@ export function StageScene() {
     } catch {}
     setObjects(INITIAL_OBJECTS);
     setSelectedId(null);
+    setGizmoMode("translate");
+    setActiveJoint(null);
+    setPlayheadTime(0);
+    setIsPlaying(false);
   }
 
   const cameraObj = objects.find((o) => o.kind === "camera") ?? null;
@@ -655,6 +668,7 @@ export function StageScene() {
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
+  const canKeyframeSelection = selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "mannequin";
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -664,6 +678,22 @@ export function StageScene() {
   useEffect(() => {
     setSelectedNode(selectedId !== null ? (nodes.current.get(selectedId) ?? null) : null);
   }, [selectedId]);
+
+  // Pose mode only applies to a selected mannequin — derived rather than
+  // synced back into `gizmoMode` via an effect, so selecting something else
+  // falls back to Move/Rotate for this render without a cascading update.
+  const selectedKind = selected?.kind ?? null;
+  const effectiveGizmoMode = gizmoMode === "pose" && selectedKind !== "mannequin" ? "translate" : gizmoMode;
+  const effectiveActiveJoint = effectiveGizmoMode === "pose" ? activeJoint : null;
+
+  const [activeJointNode, setActiveJointNode] = useState<THREE.Object3D | null>(null);
+  useEffect(() => {
+    setActiveJointNode(
+      selectedId !== null && effectiveActiveJoint
+        ? (jointNodes.current.get(`${selectedId}:${effectiveActiveJoint}`) ?? null)
+        : null
+    );
+  }, [selectedId, effectiveActiveJoint]);
 
   function addFromInventory(kind: "box" | "ball" | "mannequin") {
     const id = nextId.current++;
@@ -683,7 +713,8 @@ export function StageScene() {
       base.position = [0, newSize, 2];
       base.size = newSize;
     }
-    // mannequin stands at y=0 — its own geometry is already floor-relative
+    // mannequin stands at y=0 — its own geometry is already floor-relative,
+    // and its rest pose defaults inside the Mannequin component
     setObjects((prev) => [...prev, base]);
     setSelectedId(id);
     setGizmoMode("translate");
@@ -701,11 +732,31 @@ export function StageScene() {
   // Fires continuously while dragging. Reads the gizmo-mutated transform
   // back into React state — without this, the next render's position/
   // rotation props would snap the object back to its pre-drag value.
+  //
+  // A keyframed object skips the write instead: its rendered position comes
+  // from interpolating keyframes (see SceneContents), not from these base
+  // fields, so writing here would do nothing useful — and since we don't
+  // touch `objects`, nothing re-renders mid-drag to fight the gizmo's own
+  // direct mutation of the node. The drag is only made permanent by an
+  // explicit "+ Key" click, which reads the (now-dragged) live node.
   function syncSelectedTransform() {
-    if (selectedId === null || !selectedNode) return;
+    if (selectedId === null || !selectedNode || selected?.keyframes?.length) return;
     const { x, y, z } = selectedNode.position;
     const rotation: Vec3 = [selectedNode.rotation.x, selectedNode.rotation.y, selectedNode.rotation.z];
     setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, position: [x, y, z], rotation } : o)));
+  }
+
+  /** Same idea as syncSelectedTransform, but for one limb's pivot rotation —
+   * joint poses are never keyframed (static/manual only), so this always
+   * writes straight through. */
+  function syncJointTransform() {
+    if (selectedId === null || !effectiveActiveJoint || !activeJointNode) return;
+    const rotation: Vec3 = [activeJointNode.rotation.x, activeJointNode.rotation.y, activeJointNode.rotation.z];
+    setObjects((prev) =>
+      prev.map((o) =>
+        o.id === selectedId ? { ...o, pose: { ...DEFAULT_POSE, ...o.pose, [effectiveActiveJoint]: rotation } } : o
+      )
+    );
   }
 
   // Persists the camera's live (imperatively-mutated) transform/FOV back
@@ -756,6 +807,48 @@ export function StageScene() {
     setActiveHoldKind(null);
   }
 
+  function togglePlay() {
+    if (!isPlaying && playheadTime >= TIMELINE_DURATION) setPlayheadTime(0);
+    setIsPlaying((p) => !p);
+  }
+
+  /** Captures the selected object's current live transform (its dragged
+   * position if mid-edit, its interpolated one otherwise) as a keyframe at
+   * the current playhead time — the only way a keyframed object's pose
+   * actually changes, and how a static object gets its first keyframe. */
+  function addKeyframe() {
+    if (!selected || !selectedNode || !canKeyframeSelection) return;
+    const { x, y, z } = selectedNode.position;
+    const rotation: Vec3 = [selectedNode.rotation.x, selectedNode.rotation.y, selectedNode.rotation.z];
+    setObjects((prev) =>
+      prev.map((o) =>
+        o.id === selected.id ? { ...o, keyframes: upsertKeyframe(o.keyframes, playheadTime, [x, y, z], rotation) } : o
+      )
+    );
+  }
+
+  function deleteKeyframe() {
+    if (!selected) return;
+    const { keyframes, removed } = deleteKeyframeNear(selected.keyframes, playheadTime);
+    if (!removed) return;
+    setObjects((prev) =>
+      prev.map((o) => {
+        if (o.id !== selected.id) return o;
+        if (keyframes.length === 0) {
+          // last keyframe gone — freeze at its pose so the object doesn't
+          // jump back to whatever the base position/rotation used to be
+          return { ...o, keyframes: undefined, position: removed.position, rotation: removed.rotation };
+        }
+        return { ...o, keyframes };
+      })
+    );
+  }
+
+  const keyframeTimes = selected?.keyframes?.map((k) => k.time) ?? [];
+  const hasKeyframeAtPlayhead = !!selected?.keyframes?.some((k) => Math.abs(k.time - playheadTime) < KEYFRAME_EPSILON);
+  const selectedDisplay =
+    selected && (selected.keyframes?.length ? interpolateTransform(selected.keyframes, playheadTime) : { position: selected.position, rotation: selected.rotation });
+
   return (
     <div className="relative h-full w-full">
       <Canvas
@@ -791,16 +884,25 @@ export function StageScene() {
           objRef={setObjRef}
           lookingThroughId={lookingThroughId}
           cameraRef={cameraFovRef}
+          playheadTime={playheadTime}
+          poseModeId={effectiveGizmoMode === "pose" ? selectedId : null}
+          activeJoint={effectiveActiveJoint}
+          onSelectJoint={setActiveJoint}
+          jointRef={setJointRef}
         />
 
-        {selectedNode && (
+        {selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && (
           <TransformControls
             object={selectedNode}
-            mode={gizmoMode}
-            space={gizmoMode === "translate" ? "world" : "local"}
+            mode={effectiveGizmoMode}
+            space={effectiveGizmoMode === "translate" ? "world" : "local"}
             onMouseDown={handleGizmoMouseDown}
             onObjectChange={syncSelectedTransform}
           />
+        )}
+
+        {activeJointNode && effectiveGizmoMode === "pose" && !isPlaying && (
+          <TransformControls object={activeJointNode} mode="rotate" space="local" onObjectChange={syncJointTransform} />
         )}
 
         {cameraObj && (
@@ -813,11 +915,27 @@ export function StageScene() {
           />
         )}
 
+        <PlaybackDriver
+          isPlaying={isPlaying}
+          duration={TIMELINE_DURATION}
+          onFrame={(delta) => {
+            // Stops (doesn't loop) once the playhead reaches the end. This
+            // is a useFrame callback, not a React effect, so setting two
+            // pieces of state from it directly — rather than deriving the
+            // stop from an effect watching playheadTime — is the intended
+            // "notify React from an external system" pattern, not the
+            // derived-state-in-an-effect anti-pattern.
+            const next = Math.min(playheadTime + delta, TIMELINE_DURATION);
+            setPlayheadTime(next);
+            if (next >= TIMELINE_DURATION) setIsPlaying(false);
+          }}
+        />
+
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
 
       {/* Manipulation tools: transform mode, camera view + capture, reset */}
-      <div className="absolute bottom-16 left-6 flex items-center gap-3">
+      <div className="absolute bottom-32 left-6 flex items-center gap-3">
         <div className="flex rounded-full border border-border bg-bg-panel p-1">
           {(["translate", "rotate"] as const).map((mode) => (
             <button
@@ -825,12 +943,23 @@ export function StageScene() {
               onClick={() => setGizmoMode(mode)}
               title="Toggle with R"
               className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                gizmoMode === mode ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                effectiveGizmoMode === mode ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
               }`}
             >
               {mode === "translate" ? "Move" : "Rotate"}
             </button>
           ))}
+          {selected?.kind === "mannequin" && (
+            <button
+              onClick={() => setGizmoMode("pose")}
+              title="Drag a joint handle to pose that limb"
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                effectiveGizmoMode === "pose" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+              }`}
+            >
+              Pose
+            </button>
+          )}
         </div>
 
         {cameraObj && (
@@ -869,7 +998,7 @@ export function StageScene() {
       </div>
 
       {/* Creation tools: canned camera moves, and the inventory to add new objects */}
-      <div className="absolute bottom-6 left-6 flex items-end gap-3">
+      <div className="absolute bottom-20 left-6 flex items-end gap-3">
         {cameraObj && (
           <div className="relative">
             {cameraMovesOpen && (
@@ -976,14 +1105,47 @@ export function StageScene() {
             {inventoryOpen ? "× Inventory" : "+ Inventory"}
           </button>
         </div>
+
+        <CastPanel open={castOpen} onToggle={() => setCastOpen((v) => !v)} />
       </div>
 
-      {selected && (
-        <div className="absolute bottom-6 right-6 flex flex-col items-end gap-1">
+      {selected && canKeyframeSelection && (
+        <Timeline
+          duration={TIMELINE_DURATION}
+          playheadTime={playheadTime}
+          onScrub={(t) => {
+            setIsPlaying(false);
+            setPlayheadTime(t);
+          }}
+          isPlaying={isPlaying}
+          onTogglePlay={togglePlay}
+          keyframeTimes={keyframeTimes}
+          canKeyframe={canKeyframeSelection}
+          hasKeyframeAtPlayhead={hasKeyframeAtPlayhead}
+          onAddKey={addKeyframe}
+          onDeleteKey={deleteKeyframe}
+        />
+      )}
+
+      {selected && selectedDisplay && (
+        <div className="absolute bottom-20 right-6 flex flex-col items-end gap-1">
           {canDuplicate && (
             <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
           )}
-          <TransformReadout mode={gizmoMode} position={selected.position} rotation={selected.rotation} />
+          {effectiveGizmoMode === "pose" ? (
+            effectiveActiveJoint ? (
+              <TransformReadout
+                mode="rotate"
+                position={[0, 0, 0]}
+                rotation={selected.pose?.[effectiveActiveJoint] ?? DEFAULT_POSE[effectiveActiveJoint]}
+                label={JOINT_LABELS[effectiveActiveJoint]}
+              />
+            ) : (
+              <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">click a joint to pose it</p>
+            )
+          ) : (
+            <TransformReadout mode={effectiveGizmoMode} position={selectedDisplay.position} rotation={selectedDisplay.rotation} />
+          )}
         </div>
       )}
     </div>

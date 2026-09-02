@@ -59,6 +59,16 @@ export type GenerateRequest = {
   input_references?: InputReference[];
 };
 
+export type ImageGenerateRequest = {
+  model: string;
+  prompt: string;
+  input_references?: InputReference[];
+};
+
+export type ImageGenerateResponse = {
+  data: { b64_json: string; media_type: string }[];
+};
+
 export type Take = {
   id: string;
   prompt: string;
