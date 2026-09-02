@@ -312,25 +312,54 @@ function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId
   );
 }
 
-type MoveKind = "dolly-zoom-in" | "zoom" | "pan";
+type MoveKind = "dolly-zoom-in" | "dolly-zoom-out" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
 type StopStyle = "linear" | "quad";
 
 // Key bound to each move — held down (not clicked) to run it.
-const MOVE_KEYS: Record<string, MoveKind> = { i: "dolly-zoom-in", z: "zoom", p: "pan" };
-const MOVE_LABELS: Record<MoveKind, string> = { "dolly-zoom-in": "Dolly zoom in (I)", zoom: "Zoom (Z)", pan: "Pan (P)" };
+const MOVE_KEYS: Record<string, MoveKind> = {
+  i: "dolly-zoom-in",
+  o: "dolly-zoom-out",
+  z: "zoom-in",
+  x: "zoom-out",
+  p: "pan-right",
+  l: "pan-left",
+};
+// Short label shown on each button — paired with the row's own move-name label.
+const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
+  "dolly-zoom-in": "In (I)",
+  "dolly-zoom-out": "Out (O)",
+  "zoom-in": "In (Z)",
+  "zoom-out": "Out (X)",
+  "pan-left": "Left (L)",
+  "pan-right": "Right (P)",
+};
+// Row groupings for the popover: [negative-direction kind, positive-direction kind, row label].
+const MOVE_ROWS = [
+  ["dolly-zoom-out", "dolly-zoom-in", "Dolly zoom"],
+  ["zoom-out", "zoom-in", "Zoom"],
+  ["pan-left", "pan-right", "Pan"],
+] as const;
 // How fast each move progresses per second while held.
-const MOVE_RATES: Record<MoveKind, number> = { "dolly-zoom-in": 0.7, zoom: 14, pan: 24 };
+const MOVE_RATES: Record<MoveKind, number> = {
+  "dolly-zoom-in": 0.7,
+  "dolly-zoom-out": 0.7,
+  "zoom-in": 14,
+  "zoom-out": 14,
+  "pan-left": 24,
+  "pan-right": 24,
+};
 const STOP_DECAY_MS = 400; // "quad" stop style eases the rate to 0 over this long
 const MIN_FOV = 8;
 const MAX_FOV = 100;
 const MIN_DOLLY_DIST = 0.5;
+const MAX_DOLLY_DIST = 10;
 
 type HoldState = {
   kind: MoveKind;
   phase: "hold" | "decay";
   decayStart?: number;
   rateAtRelease?: number;
-  k?: number; // dolly-zoom-in only: apparent-size constant fixed at grab time
+  k?: number; // dolly-zoom-in/out only: apparent-size constant fixed at grab time
 };
 
 /**
@@ -372,25 +401,28 @@ function HoldMoveAnimator({
       if (t >= 1) holdRef.current = null;
     }
 
-    if (hold.kind === "zoom") {
+    if (hold.kind === "zoom-in" || hold.kind === "zoom-out") {
       // FOV only — a plain optical zoom, camera stays put.
-      cam.fov = THREE.MathUtils.clamp(cam.fov - rate * delta, MIN_FOV, MAX_FOV);
+      const sign = hold.kind === "zoom-in" ? -1 : 1;
+      cam.fov = THREE.MathUtils.clamp(cam.fov + sign * rate * delta, MIN_FOV, MAX_FOV);
       cam.updateProjectionMatrix();
-    } else if (hold.kind === "pan") {
+    } else if (hold.kind === "pan-left" || hold.kind === "pan-right") {
       // Rotate in place — position/FOV untouched, matches swinging a camera
       // on a fixed tripod head.
-      camNode.rotation.y += THREE.MathUtils.degToRad(rate * delta);
-    } else if (hold.kind === "dolly-zoom-in" && hold.k !== undefined) {
-      // Push toward the focus point while widening FOV to compensate, so
-      // the focus point stays the same apparent size and the background
-      // warps — the actual Vertigo/"trombone" effect, not a plain push-in.
+      const sign = hold.kind === "pan-right" ? 1 : -1;
+      camNode.rotation.y += sign * THREE.MathUtils.degToRad(rate * delta);
+    } else if ((hold.kind === "dolly-zoom-in" || hold.kind === "dolly-zoom-out") && hold.k !== undefined) {
+      // Move along the focus axis while adjusting FOV to compensate, so the
+      // focus point stays the same apparent size and the background warps —
+      // the actual Vertigo/"trombone" effect, not a plain push-in/pull-out.
       // Derivation: apparent size ∝ 1 / (distance · tan(fov/2)), so holding
       // that product constant (k, fixed at grab time) gives fov from dist.
+      const sign = hold.kind === "dolly-zoom-in" ? -1 : 1;
       const dir = new THREE.Vector3();
       camNode.getWorldDirection(dir);
       const focus = new THREE.Vector3(0, 1, 0);
       const dist = camNode.position.distanceTo(focus);
-      const newDist = Math.max(MIN_DOLLY_DIST, dist - rate * delta);
+      const newDist = THREE.MathUtils.clamp(dist + sign * rate * delta, MIN_DOLLY_DIST, MAX_DOLLY_DIST);
       camNode.position.addScaledVector(dir, dist - newDist);
       cam.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(hold.k / newDist)), MIN_FOV, MAX_FOV);
       cam.updateProjectionMatrix();
@@ -691,8 +723,8 @@ export function StageScene() {
   }
 
   // Grabbed on keydown/mousedown. Ignores a repeat trigger for the move
-  // already in progress (keyboard auto-repeat would otherwise re-arm
-  // dolly-zoom-in's fixed `k` constant every ~30ms).
+  // already in progress (keyboard auto-repeat would otherwise re-arm a
+  // dolly-zoom move's fixed `k` constant every ~30ms).
   function startHold(kind: MoveKind) {
     const cameraId = cameraIdRef.current;
     if (cameraId === null) return;
@@ -702,7 +734,7 @@ export function StageScene() {
     if (holdRef.current?.kind === kind && holdRef.current.phase === "hold") return;
 
     const state: HoldState = { kind, phase: "hold" };
-    if (kind === "dolly-zoom-in") {
+    if (kind === "dolly-zoom-in" || kind === "dolly-zoom-out") {
       const focus = new THREE.Vector3(0, 1, 0);
       const d0 = camNode.position.distanceTo(focus);
       state.k = d0 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
@@ -842,20 +874,25 @@ export function StageScene() {
           <div className="relative">
             {cameraMovesOpen && (
               <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
-                <div className="flex items-center gap-1">
-                  <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Hold</span>
-                  {(["dolly-zoom-in", "zoom", "pan"] as const).map((kind) => (
-                    <button
-                      key={kind}
-                      onMouseDown={() => startHold(kind)}
-                      onMouseUp={() => stopHold(kind)}
-                      onMouseLeave={() => stopHold(kind)}
-                      className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                        activeHoldKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
-                      }`}
-                    >
-                      {MOVE_LABELS[kind]}
-                    </button>
+                <div className="flex flex-col gap-1">
+                  <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Hold</span>
+                  {MOVE_ROWS.map(([negKind, posKind, label]) => (
+                    <div key={label} className="flex items-center gap-1">
+                      <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                      {[negKind, posKind].map((kind) => (
+                        <button
+                          key={kind}
+                          onMouseDown={() => startHold(kind)}
+                          onMouseUp={() => stopHold(kind)}
+                          onMouseLeave={() => stopHold(kind)}
+                          className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                            activeHoldKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                          }`}
+                        >
+                          {MOVE_SHORT_LABELS[kind]}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
                 <div className="flex items-center gap-1">
