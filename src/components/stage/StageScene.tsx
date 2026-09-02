@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls, View } from "@react-three/drei";
+import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 
 const BACKDROP_COLOR = "#e8e2d6";
@@ -128,12 +128,11 @@ function LightStand({ id, position, rotation, selected, onSelect, objRef }: Item
   );
 }
 
-/** A simple camera-shaped marker. `hideBody` is used only by the camera's
- * own PIP preview, so it doesn't render a giant close-up of itself. */
-function CameraMarker({ id, position, rotation, selected, onSelect, objRef, hideBody }: ItemProps & {
+/** A simple camera-shaped marker prop — selectable and movable like anything
+ * else, purely decorative (no viewfinder feature yet). */
+function CameraMarker({ id, position, rotation, selected, onSelect, objRef }: ItemProps & {
   position: Vec3;
   rotation: Vec3;
-  hideBody?: boolean;
 }) {
   return (
     <group
@@ -145,21 +144,19 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, hide
         onSelect(id);
       }}
     >
-      <group visible={!hideBody}>
-        <mesh castShadow>
-          <boxGeometry args={[0.35, 0.25, 0.3]} />
-          <meshStandardMaterial
-            color="#1c1c1a"
-            roughness={0.4}
-            emissive={selected ? "#ffffff" : "#000000"}
-            emissiveIntensity={selected ? 0.2 : 0}
-          />
-        </mesh>
-        <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <coneGeometry args={[0.12, 0.22, 16]} />
-          <meshStandardMaterial color="#333330" roughness={0.3} metalness={0.4} />
-        </mesh>
-      </group>
+      <mesh castShadow>
+        <boxGeometry args={[0.35, 0.25, 0.3]} />
+        <meshStandardMaterial
+          color="#1c1c1a"
+          roughness={0.4}
+          emissive={selected ? "#ffffff" : "#000000"}
+          emissiveIntensity={selected ? 0.2 : 0}
+        />
+      </mesh>
+      <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <coneGeometry args={[0.12, 0.22, 16]} />
+        <meshStandardMaterial color="#333330" roughness={0.3} metalness={0.4} />
+      </mesh>
     </group>
   );
 }
@@ -169,12 +166,10 @@ type SceneContentsProps = {
   selectedId: number | null;
   onSelect: (id: number) => void;
   objRef: (id: number, obj: THREE.Object3D | null) => void;
-  hideBodyForId?: number;
 };
 
-/** The room shell (lights, walls, floor) plus every scene object. Shared
- * between the main interactive view and the camera's read-only PIP preview. */
-function SceneContents({ objects, selectedId, onSelect, objRef, hideBodyForId }: SceneContentsProps) {
+/** The room shell (lights, walls, floor) plus every scene object. */
+function SceneContents({ objects, selectedId, onSelect, objRef }: SceneContentsProps) {
   return (
     <>
       <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
@@ -209,34 +204,10 @@ function SceneContents({ objects, selectedId, onSelect, objRef, hideBodyForId }:
         if (o.kind === "light") {
           return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
         }
-        return (
-          <CameraMarker
-            key={o.id}
-            {...common}
-            position={o.position}
-            rotation={o.rotation}
-            hideBody={o.id === hideBodyForId}
-          />
-        );
+        return <CameraMarker key={o.id} {...common} position={o.position} rotation={o.rotation} />;
       })}
     </>
   );
-}
-
-/** Mounting a drei <View> switches the whole canvas to manual rendering
- * (any render-priority subscriber does), which would blank the main scene —
- * this keeps drawing it every frame while the camera PIP is open. The
- * viewport reset matters: the PIP's own draw call (later this same frame,
- * at a higher priority) leaves gl's viewport pinned to its small rect, and
- * WebGL viewport state persists across frames — without resetting it here
- * first, the *next* frame's main render gets squeezed into that leftover
- * rect instead of filling the canvas. */
-function KeepMainViewRendering() {
-  useFrame((state) => {
-    state.gl.setViewport(0, 0, state.size.width, state.size.height);
-    state.gl.render(state.scene, state.camera);
-  });
-  return null;
 }
 
 /** Bottom-right readout of the selected object's live transform. */
@@ -256,8 +227,6 @@ function TransformReadout({ mode, position, rotation }: { mode: "translate" | "r
     </p>
   );
 }
-
-function noop() {}
 
 /** Reads a saved layout on mount. Safe as a `useState` lazy initializer
  * (rather than an effect) because none of the objects it returns changes
@@ -282,7 +251,6 @@ export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">("translate");
-  const [showCameraView, setShowCameraView] = useState(false);
   const [newSize, setNewSize] = useState(0.8);
 
   const nodes = useRef(new Map<number, THREE.Object3D>());
@@ -290,7 +258,6 @@ export function StageScene() {
     if (obj) nodes.current.set(id, obj);
     else nodes.current.delete(id);
   };
-  const pipRef = useRef<HTMLDivElement>(null);
 
   // Ctrl is tracked on window rather than read from the gizmo's mouse event,
   // since TransformControls' onMouseDown doesn't forward the source PointerEvent.
@@ -334,7 +301,6 @@ export function StageScene() {
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
-  const cameraObj = objects.find((o) => o.kind === "camera") ?? null;
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -395,31 +361,7 @@ export function StageScene() {
         )}
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
-
-        {showCameraView && cameraObj && (
-          <>
-            <KeepMainViewRendering />
-            <View track={pipRef as React.RefObject<HTMLElement>}>
-              <color attach="background" args={[BACKDROP_COLOR]} />
-              <PerspectiveCamera makeDefault position={cameraObj.position} rotation={cameraObj.rotation} fov={50} />
-              <SceneContents
-                objects={objects}
-                selectedId={null}
-                onSelect={noop}
-                objRef={noop}
-                hideBodyForId={cameraObj.id}
-              />
-            </View>
-          </>
-        )}
       </Canvas>
-
-      {showCameraView && (
-        <div
-          ref={pipRef}
-          className="pointer-events-none absolute bottom-24 right-6 h-36 w-56 overflow-hidden rounded-lg border border-border"
-        />
-      )}
 
       <div className="absolute bottom-6 left-6 flex items-center gap-3">
         <div className="flex rounded-full border border-border bg-bg-panel p-1">
@@ -446,7 +388,7 @@ export function StageScene() {
             step={0.1}
             value={newSize}
             onChange={(e) => setNewSize(Number(e.target.value) || DEFAULT_SIZE.box)}
-            className="w-12 rounded-full bg-transparent px-2 py-1 text-[10px] text-fg outline-none"
+            className="w-12 rounded-full bg-transparent px-2 py-1 text-[10px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <button
             onClick={() => addShape("box")}
@@ -461,13 +403,6 @@ export function StageScene() {
             + Ball
           </button>
         </div>
-
-        <button
-          onClick={() => setShowCameraView((v) => !v)}
-          className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-        >
-          {showCameraView ? "Hide camera view" : "Show camera view"}
-        </button>
 
         <button
           onClick={resetLayout}
