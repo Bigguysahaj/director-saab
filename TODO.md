@@ -41,13 +41,18 @@ https://rystorm.com/blog/translate-gizmo-design.
   it can be repositioned without round-tripping through the orbit view — its
   own gizmo is unusable there since it renders exactly at the viewer's eye
   point.
-- **Camera moves:** three preset animations (Dolly zoom, Zoom, Pan),
-  triggered from the toolbar and driven by a `CameraMoveAnimator` that
-  mutates the camera's transform/FOV directly every frame. **Future plan
-  ("other"):** more move types — crane, truck/dolly-track, arc, rack focus;
-  and literal placeable rig props (a tripod to pan/tilt from, a dolly
-  track/moving crate to physically attach the camera to) instead of the
-  camera just animating itself in place.
+- **Camera moves:** three hold-to-run moves — Dolly zoom in (I), Zoom (Z),
+  Pan (P) — behind a "+ Camera moves" popover, bound to both a key and a
+  press-and-hold toolbar button. Held, a move progresses at a fixed rate
+  every frame (`HoldMoveAnimator`, framerate-independent via useFrame's
+  `delta`); released, it stops per a Linear/Quad toggle — Linear halts
+  instantly, Quad eases out over ~0.4s. Dolly zoom in does the real Vertigo
+  effect (position + inverse FOV together, subject stays the same apparent
+  size while the background warps), not a plain push-in. **Future plan
+  ("other"):** more move types — crane, truck/dolly-track, arc, rack focus,
+  and a dolly-*zoom-out* counterpart; literal placeable rig props (a tripod
+  to pan/tilt from, a dolly track/moving crate to physically attach the
+  camera to) instead of the camera just animating itself in place.
 - **Inventory:** collapsed into a "+ Inventory" popover (Size/L/B dimension
   inputs + Box/Ball/Mannequin buttons), replacing the old always-expanded
   row. **Future plan:** keyframing — record a shape's (or the mannequin's)
