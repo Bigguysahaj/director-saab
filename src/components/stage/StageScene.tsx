@@ -9,6 +9,9 @@ const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
 const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
+// Bump the suffix if SceneObject's shape ever changes, so old saved layouts
+// are ignored instead of crashing on load.
+const STORAGE_KEY = "director-stage-layout-v1";
 
 type ObjectKind = "box" | "ball" | "light" | "camera";
 type Vec3 = [number, number, number];
@@ -256,8 +259,27 @@ function TransformReadout({ mode, position, rotation }: { mode: "translate" | "r
 
 function noop() {}
 
+/** Reads a saved layout on mount. Safe as a `useState` lazy initializer
+ * (rather than an effect) because none of the objects it returns changes
+ * any server-rendered DOM — the 3D content is drawn imperatively onto a
+ * <canvas>, not diffed HTML, so there's no hydration mismatch to avoid by
+ * deferring this to an effect. */
+function loadSavedObjects(): SceneObject[] {
+  if (typeof window === "undefined") return INITIAL_OBJECTS;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // corrupted or inaccessible storage — fall back to the default layout
+  }
+  return INITIAL_OBJECTS;
+}
+
 export function StageScene() {
-  const [objects, setObjects] = useState(INITIAL_OBJECTS);
+  const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">("translate");
   const [showCameraView, setShowCameraView] = useState(false);
@@ -273,7 +295,7 @@ export function StageScene() {
   // Ctrl is tracked on window rather than read from the gizmo's mouse event,
   // since TransformControls' onMouseDown doesn't forward the source PointerEvent.
   const ctrlHeld = useRef(false);
-  const nextId = useRef(1000);
+  const nextId = useRef(Math.max(1000, ...objects.map((o) => o.id + 1)));
   useEffect(() => {
     const setFlag = (e: KeyboardEvent) => (ctrlHeld.current = e.ctrlKey);
     const handleKeydown = (e: KeyboardEvent) => {
@@ -282,6 +304,9 @@ export function StageScene() {
       if (target && (target.tagName === "INPUT" || target.isContentEditable)) return;
       if (e.key === "r" || e.key === "R") {
         setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
+      }
+      if (e.key === "c" || e.key === "C") {
+        setShowCameraView((v) => !v);
       }
     };
     window.addEventListener("keydown", handleKeydown);
@@ -292,6 +317,23 @@ export function StageScene() {
       window.removeEventListener("keyup", setFlag);
     };
   }, []);
+
+  // Auto-save on every change (drag, rotate, add, duplicate).
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(objects));
+    } catch {
+      // storage full or unavailable (private browsing) — layout just won't persist
+    }
+  }, [objects]);
+
+  function resetLayout() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setObjects(INITIAL_OBJECTS);
+    setSelectedId(null);
+  }
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
@@ -425,9 +467,17 @@ export function StageScene() {
 
         <button
           onClick={() => setShowCameraView((v) => !v)}
+          title="Toggle with C"
           className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
         >
           {showCameraView ? "Hide camera view" : "Show camera view"}
+        </button>
+
+        <button
+          onClick={resetLayout}
+          className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+        >
+          Reset layout
         </button>
       </div>
 
