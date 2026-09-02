@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls, View } from "@react-three/drei";
 import * as THREE from "three";
 
 const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
 const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
+const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
 
 type ObjectKind = "box" | "ball" | "light" | "camera";
 type Vec3 = [number, number, number];
@@ -18,18 +19,18 @@ type SceneObject = {
   position: Vec3;
   rotation: Vec3;
   color?: string; // box/ball only
+  size?: number; // box/ball only — side length for box, radius for ball
 };
 
 // Static layout to start from. Y on the box/ball props is each shape's own
-// half-height/radius so it sits flush on the floor (boxes are 0.8 side,
-// balls are 0.5 radius).
+// half-height/radius so it sits flush on the floor.
 const INITIAL_OBJECTS: SceneObject[] = [
-  { id: 0, kind: "box", position: [-1.4, 0.4, 0.6], rotation: [0, 0, 0], color: PALETTE[0] },
-  { id: 1, kind: "ball", position: [-0.4, 0.5, -0.5], rotation: [0, 0, 0], color: PALETTE[1] },
-  { id: 2, kind: "box", position: [0.5, 0.4, 0.8], rotation: [0, 0, 0], color: PALETTE[2] },
-  { id: 3, kind: "ball", position: [1.4, 0.5, -0.2], rotation: [0, 0, 0], color: PALETTE[3] },
-  { id: 4, kind: "box", position: [-0.9, 0.4, -1.2], rotation: [0, 0, 0], color: PALETTE[4] },
-  { id: 5, kind: "ball", position: [0.9, 0.5, 1.1], rotation: [0, 0, 0], color: PALETTE[0] },
+  { id: 0, kind: "box", position: [-1.4, 0.4, 0.6], rotation: [0, 0, 0], color: PALETTE[0], size: 0.8 },
+  { id: 1, kind: "ball", position: [-0.4, 0.5, -0.5], rotation: [0, 0, 0], color: PALETTE[1], size: 0.5 },
+  { id: 2, kind: "box", position: [0.5, 0.4, 0.8], rotation: [0, 0, 0], color: PALETTE[2], size: 0.8 },
+  { id: 3, kind: "ball", position: [1.4, 0.5, -0.2], rotation: [0, 0, 0], color: PALETTE[3], size: 0.5 },
+  { id: 4, kind: "box", position: [-0.9, 0.4, -1.2], rotation: [0, 0, 0], color: PALETTE[4], size: 0.8 },
+  { id: 5, kind: "ball", position: [0.9, 0.5, 1.1], rotation: [0, 0, 0], color: PALETTE[0], size: 0.5 },
   { id: 6, kind: "light", position: [-3, 0, 1.5], rotation: [0, 0.6, 0] },
   { id: 7, kind: "light", position: [3, 0, 1.5], rotation: [0, -0.6, 0] },
   { id: 8, kind: "camera", position: [-2.5, 1.6, 1], rotation: [-0.22, -1.19, 0] },
@@ -42,11 +43,12 @@ type ItemProps = {
   objRef: (id: number, obj: THREE.Object3D | null) => void;
 };
 
-function ShapeProp({ id, shape, position, rotation, color, selected, onSelect, objRef }: ItemProps & {
+function ShapeProp({ id, shape, position, rotation, color, size, selected, onSelect, objRef }: ItemProps & {
   shape: "box" | "ball";
   position: Vec3;
   rotation: Vec3;
   color: string;
+  size: number;
 }) {
   return (
     <mesh
@@ -60,7 +62,7 @@ function ShapeProp({ id, shape, position, rotation, color, selected, onSelect, o
         onSelect(id);
       }}
     >
-      {shape === "box" ? <boxGeometry args={[0.8, 0.8, 0.8]} /> : <sphereGeometry args={[0.5, 32, 32]} />}
+      {shape === "box" ? <boxGeometry args={[size, size, size]} /> : <sphereGeometry args={[size, 32, 32]} />}
       <meshStandardMaterial
         color={color}
         roughness={0.5}
@@ -123,12 +125,12 @@ function LightStand({ id, position, rotation, selected, onSelect, objRef }: Item
   );
 }
 
-/** A simple camera-shaped marker. Its own PerspectiveCamera becomes the
- * active view while "looking through" it. */
-function CameraMarker({ id, position, rotation, selected, onSelect, objRef, lookingThrough }: ItemProps & {
+/** A simple camera-shaped marker. `hideBody` is used only by the camera's
+ * own PIP preview, so it doesn't render a giant close-up of itself. */
+function CameraMarker({ id, position, rotation, selected, onSelect, objRef, hideBody }: ItemProps & {
   position: Vec3;
   rotation: Vec3;
-  lookingThrough: boolean;
+  hideBody?: boolean;
 }) {
   return (
     <group
@@ -140,8 +142,7 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
         onSelect(id);
       }}
     >
-      {/* body + lens, hidden while looking through this camera's own view */}
-      <group visible={!lookingThrough}>
+      <group visible={!hideBody}>
         <mesh castShadow>
           <boxGeometry args={[0.35, 0.25, 0.3]} />
           <meshStandardMaterial
@@ -156,10 +157,83 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
           <meshStandardMaterial color="#333330" roughness={0.3} metalness={0.4} />
         </mesh>
       </group>
-      {/* PerspectiveCamera looks down local -Z by default, same direction the lens cone points */}
-      <PerspectiveCamera makeDefault={lookingThrough} fov={50} />
     </group>
   );
+}
+
+type SceneContentsProps = {
+  objects: SceneObject[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  objRef: (id: number, obj: THREE.Object3D | null) => void;
+  hideBodyForId?: number;
+};
+
+/** The room shell (lights, walls, floor) plus every scene object. Shared
+ * between the main interactive view and the camera's read-only PIP preview. */
+function SceneContents({ objects, selectedId, onSelect, objRef, hideBodyForId }: SceneContentsProps) {
+  return (
+    <>
+      <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
+      <ambientLight intensity={0.4} />
+
+      {/* backdrop wall */}
+      <mesh position={[0, 4, -3]} receiveShadow>
+        <boxGeometry args={[12, 8, 0.2]} />
+        <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+      </mesh>
+      {/* floor */}
+      <mesh position={[0, 0, 0]} receiveShadow>
+        <boxGeometry args={[12, 0.2, 8]} />
+        <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+      </mesh>
+
+      {objects.map((o) => {
+        const common = { id: o.id, selected: o.id === selectedId, onSelect, objRef };
+        if (o.kind === "box" || o.kind === "ball") {
+          return (
+            <ShapeProp
+              key={o.id}
+              {...common}
+              shape={o.kind}
+              position={o.position}
+              rotation={o.rotation}
+              color={o.color ?? PALETTE[0]}
+              size={o.size ?? DEFAULT_SIZE[o.kind]}
+            />
+          );
+        }
+        if (o.kind === "light") {
+          return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
+        }
+        return (
+          <CameraMarker
+            key={o.id}
+            {...common}
+            position={o.position}
+            rotation={o.rotation}
+            hideBody={o.id === hideBodyForId}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+/** Mounting a drei <View> switches the whole canvas to manual rendering
+ * (any render-priority subscriber does), which would blank the main scene —
+ * this keeps drawing it every frame while the camera PIP is open. The
+ * viewport reset matters: the PIP's own draw call (later this same frame,
+ * at a higher priority) leaves gl's viewport pinned to its small rect, and
+ * WebGL viewport state persists across frames — without resetting it here
+ * first, the *next* frame's main render gets squeezed into that leftover
+ * rect instead of filling the canvas. */
+function KeepMainViewRendering() {
+  useFrame((state) => {
+    state.gl.setViewport(0, 0, state.size.width, state.size.height);
+    state.gl.render(state.scene, state.camera);
+  });
+  return null;
 }
 
 /** Bottom-right readout of the selected object's live transform. */
@@ -180,17 +254,21 @@ function TransformReadout({ mode, position, rotation }: { mode: "translate" | "r
   );
 }
 
+function noop() {}
+
 export function StageScene() {
   const [objects, setObjects] = useState(INITIAL_OBJECTS);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate">("translate");
-  const [lookingThrough, setLookingThrough] = useState(false);
+  const [showCameraView, setShowCameraView] = useState(false);
+  const [newSize, setNewSize] = useState(0.8);
 
   const nodes = useRef(new Map<number, THREE.Object3D>());
   const setObjRef = (id: number, obj: THREE.Object3D | null) => {
     if (obj) nodes.current.set(id, obj);
     else nodes.current.delete(id);
   };
+  const pipRef = useRef<HTMLDivElement>(null);
 
   // Ctrl is tracked on window rather than read from the gizmo's mouse event,
   // since TransformControls' onMouseDown doesn't forward the source PointerEvent.
@@ -209,6 +287,7 @@ export function StageScene() {
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
+  const cameraObj = objects.find((o) => o.kind === "camera") ?? null;
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -218,6 +297,17 @@ export function StageScene() {
   useEffect(() => {
     setSelectedNode(selectedId !== null ? (nodes.current.get(selectedId) ?? null) : null);
   }, [selectedId]);
+
+  function addShape(kind: "box" | "ball") {
+    const id = nextId.current++;
+    const y = kind === "box" ? newSize / 2 : newSize;
+    setObjects((prev) => [
+      ...prev,
+      { id, kind, position: [0, y, 2], rotation: [0, 0, 0], color: PALETTE[id % PALETTE.length], size: newSize },
+    ]);
+    setSelectedId(id);
+    setGizmoMode("translate");
+  }
 
   // Ctrl+drag leaves a copy at the start position — the gizmo keeps
   // manipulating the object it already grabbed, so the "moved" one and the
@@ -242,58 +332,10 @@ export function StageScene() {
     <div className="relative h-full w-full">
       <Canvas shadows dpr={[1, 2]} className="!absolute inset-0" onPointerMissed={() => setSelectedId(null)}>
         <color attach="background" args={[BACKDROP_COLOR]} />
-        <PerspectiveCamera makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
-        <OrbitControls
-          makeDefault
-          enabled={!lookingThrough}
-          target={[0, 1, 0]}
-          minDistance={3}
-          maxDistance={12}
-          maxPolarAngle={1.5}
-          enableDamping
-        />
+        <PerspectiveCamera makeDefault position={[3.5, 2.2, 5]} fov={45} />
+        <OrbitControls makeDefault target={[0, 1, 0]} minDistance={3} maxDistance={12} maxPolarAngle={1.5} enableDamping />
 
-        <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
-        <ambientLight intensity={0.4} />
-
-        {/* backdrop wall */}
-        <mesh position={[0, 4, -3]} receiveShadow>
-          <boxGeometry args={[12, 8, 0.2]} />
-          <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
-        </mesh>
-        {/* floor */}
-        <mesh position={[0, 0, 0]} receiveShadow>
-          <boxGeometry args={[12, 0.2, 8]} />
-          <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
-        </mesh>
-
-        {objects.map((o) => {
-          const common = { id: o.id, selected: o.id === selectedId, onSelect: setSelectedId, objRef: setObjRef };
-          if (o.kind === "box" || o.kind === "ball") {
-            return (
-              <ShapeProp
-                key={o.id}
-                {...common}
-                shape={o.kind}
-                position={o.position}
-                rotation={o.rotation}
-                color={o.color ?? PALETTE[0]}
-              />
-            );
-          }
-          if (o.kind === "light") {
-            return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
-          }
-          return (
-            <CameraMarker
-              key={o.id}
-              {...common}
-              position={o.position}
-              rotation={o.rotation}
-              lookingThrough={lookingThrough && o.id === selectedId}
-            />
-          );
-        })}
+        <SceneContents objects={objects} selectedId={selectedId} onSelect={setSelectedId} objRef={setObjRef} />
 
         {selectedNode && (
           <TransformControls
@@ -306,7 +348,31 @@ export function StageScene() {
         )}
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
+
+        {showCameraView && cameraObj && (
+          <>
+            <KeepMainViewRendering />
+            <View track={pipRef as React.RefObject<HTMLElement>}>
+              <color attach="background" args={[BACKDROP_COLOR]} />
+              <PerspectiveCamera makeDefault position={cameraObj.position} rotation={cameraObj.rotation} fov={50} />
+              <SceneContents
+                objects={objects}
+                selectedId={null}
+                onSelect={noop}
+                objRef={noop}
+                hideBodyForId={cameraObj.id}
+              />
+            </View>
+          </>
+        )}
       </Canvas>
+
+      {showCameraView && (
+        <div
+          ref={pipRef}
+          className="pointer-events-none absolute bottom-24 right-6 h-36 w-56 overflow-hidden rounded-lg border border-border"
+        />
+      )}
 
       <div className="absolute bottom-6 left-6 flex items-center gap-3">
         <div className="flex rounded-full border border-border bg-bg-panel p-1">
@@ -323,22 +389,37 @@ export function StageScene() {
           ))}
         </div>
 
-        {selected?.kind === "camera" && (
+        <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel py-1 pl-3 pr-1">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">Size</span>
+          <input
+            type="number"
+            min={0.2}
+            max={2}
+            step={0.1}
+            value={newSize}
+            onChange={(e) => setNewSize(Number(e.target.value) || DEFAULT_SIZE.box)}
+            className="w-12 rounded-full bg-transparent px-2 py-1 text-[10px] text-fg outline-none"
+          />
           <button
-            onClick={() => setLookingThrough((v) => !v)}
-            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+            onClick={() => addShape("box")}
+            className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
           >
-            {lookingThrough ? "Exit camera view" : "Look through camera"}
+            + Box
           </button>
-        )}
-        {lookingThrough && selected?.kind !== "camera" && (
           <button
-            onClick={() => setLookingThrough(false)}
-            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+            onClick={() => addShape("ball")}
+            className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
           >
-            Exit camera view
+            + Ball
           </button>
-        )}
+        </div>
+
+        <button
+          onClick={() => setShowCameraView((v) => !v)}
+          className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+        >
+          {showCameraView ? "Hide camera view" : "Show camera view"}
+        </button>
       </div>
 
       {selected && (
