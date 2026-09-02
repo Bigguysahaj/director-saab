@@ -305,9 +305,6 @@ export function StageScene() {
       if (e.key === "r" || e.key === "R") {
         setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
       }
-      if (e.key === "c" || e.key === "C") {
-        setShowCameraView((v) => !v);
-      }
     };
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("keyup", setFlag);
@@ -467,7 +464,6 @@ export function StageScene() {
 
         <button
           onClick={() => setShowCameraView((v) => !v)}
-          title="Toggle with C"
           className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
         >
           {showCameraView ? "Hide camera view" : "Show camera view"}
