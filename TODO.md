@@ -27,22 +27,32 @@ https://rystorm.com/blog/translate-gizmo-design.
 - **Light stands:** move and rotate to re-aim — the spotlight's target is a
   child Object3D of the stand's group (not a fixed world point), so the beam
   actually turns with it.
-- **Camera marker:** move/rotate like anything else, plus a "Look through
-  camera" toggle that swaps the whole viewport to that camera's POV
-  (`makeDefault` flips between the main orbit camera and the marker's own
-  nested `PerspectiveCamera`; `OrbitControls` disables while active). While
-  active: "Capture photo" (canvas.toBlob → PNG download) and "Record clip"
-  (canvas.captureStream + MediaRecorder → webm download, auto-stops if you
-  exit camera view mid-recording). A picture-in-picture version of the
-  camera view via drei's `<View>` portal
+- **Camera marker:** move/rotate like anything else, plus a "Camera view"
+  toggle that swaps the whole viewport to that camera's POV (`makeDefault`
+  flips between the main orbit camera and the marker's own nested
+  `PerspectiveCamera`; `OrbitControls` disables while active). "Capture
+  photo" and "Record clip" are always available (not gated on being in
+  camera view) — triggering them auto-switches into camera view, does its
+  thing, and auto-restores whatever view you were on before. A
+  picture-in-picture version of the camera view via drei's `<View>` portal
   (https://drei.docs.pmnd.rs/portals/view) was tried and worked, then pulled
-  back out — user wants to build that part themselves.
-- **Inventory:** a toolbar row (Size/L/B dimension inputs + Box/Ball/
-  Mannequin buttons) for adding new objects, replacing the old inline
-  +Box/+Ball buttons. **Future plan:** keyframing — record a shape's (or
-  the mannequin's) position/rotation at chosen points in time and animate
-  between them, so scenes can have simple blocked-out motion instead of
-  being fully static.
+  back out — user wants to build that part themselves. **Future plan:** fly
+  controls (WASD + mouse-look) bound to the camera while in camera view, so
+  it can be repositioned without round-tripping through the orbit view — its
+  own gizmo is unusable there since it renders exactly at the viewer's eye
+  point.
+- **Camera moves:** three preset animations (Dolly zoom, Zoom, Pan),
+  triggered from the toolbar and driven by a `CameraMoveAnimator` that
+  mutates the camera's transform/FOV directly every frame. **Future plan
+  ("other"):** more move types — crane, truck/dolly-track, arc, rack focus;
+  and literal placeable rig props (a tripod to pan/tilt from, a dolly
+  track/moving crate to physically attach the camera to) instead of the
+  camera just animating itself in place.
+- **Inventory:** collapsed into a "+ Inventory" popover (Size/L/B dimension
+  inputs + Box/Ball/Mannequin buttons), replacing the old always-expanded
+  row. **Future plan:** keyframing — record a shape's (or the mannequin's)
+  position/rotation at chosen points in time and animate between them, so
+  scenes can have simple blocked-out motion instead of being fully static.
 - **Layout persistence:** every change (drag, rotate, add, duplicate)
   auto-saves to `localStorage`; "Reset layout" clears it and returns to the
   default arrangement.
