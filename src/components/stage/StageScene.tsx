@@ -276,11 +276,19 @@ export function StageScene() {
   const nextId = useRef(1000);
   useEffect(() => {
     const setFlag = (e: KeyboardEvent) => (ctrlHeld.current = e.ctrlKey);
-    window.addEventListener("keydown", setFlag);
+    const handleKeydown = (e: KeyboardEvent) => {
+      ctrlHeld.current = e.ctrlKey;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.isContentEditable)) return;
+      if (e.key === "r" || e.key === "R") {
+        setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
+      }
+    };
+    window.addEventListener("keydown", handleKeydown);
     window.addEventListener("keyup", setFlag);
     window.addEventListener("blur", () => (ctrlHeld.current = false));
     return () => {
-      window.removeEventListener("keydown", setFlag);
+      window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", setFlag);
     };
   }, []);
@@ -380,6 +388,7 @@ export function StageScene() {
             <button
               key={mode}
               onClick={() => setGizmoMode(mode)}
+              title="Toggle with R"
               className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
                 gizmoMode === mode ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
               }`}
