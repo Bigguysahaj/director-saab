@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -9,6 +9,7 @@ const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
 const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
+const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
 // are ignored instead of crashing on load.
 const STORAGE_KEY = "director-stage-layout-v1";
@@ -25,6 +26,7 @@ type SceneObject = {
   size?: number; // ball radius; box height (Y) and fallback for length/breadth
   length?: number; // box X dimension — defaults to `size` (a cube) when unset
   breadth?: number; // box Z dimension — defaults to `size` (a cube) when unset
+  fov?: number; // camera only
 };
 
 // Static layout to start from. Y on the box/ball props is each shape's own
@@ -38,7 +40,7 @@ const INITIAL_OBJECTS: SceneObject[] = [
   { id: 5, kind: "ball", position: [0.9, 0.5, 1.1], rotation: [0, 0, 0], color: PALETTE[0], size: 0.5 },
   { id: 6, kind: "light", position: [-3, 0, 1.5], rotation: [0, 0.6, 0] },
   { id: 7, kind: "light", position: [3, 0, 1.5], rotation: [0, -0.6, 0] },
-  { id: 8, kind: "camera", position: [-2.5, 1.6, 1], rotation: [-0.22, -1.19, 0] },
+  { id: 8, kind: "camera", position: [-2.5, 1.6, 1], rotation: [-0.22, -1.19, 0], fov: DEFAULT_FOV },
 ];
 
 type ItemProps = {
@@ -139,11 +141,14 @@ function LightStand({ id, position, rotation, selected, onSelect, objRef }: Item
 /** A simple camera-shaped marker. Its own PerspectiveCamera becomes the
  * active view while "looking through" it — a full viewport swap (not a
  * picture-in-picture), so the main camera and OrbitControls step aside
- * while this one is active. */
-function CameraMarker({ id, position, rotation, selected, onSelect, objRef, lookingThrough }: ItemProps & {
+ * while this one is active. `camRef` exposes the live THREE.PerspectiveCamera
+ * so camera-move presets can drive its FOV directly. */
+function CameraMarker({ id, position, rotation, selected, onSelect, objRef, lookingThrough, fov, camRef }: ItemProps & {
   position: Vec3;
   rotation: Vec3;
   lookingThrough: boolean;
+  fov: number;
+  camRef?: React.Ref<THREE.PerspectiveCamera>;
 }) {
   return (
     <group
@@ -172,7 +177,7 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
         </mesh>
       </group>
       {/* PerspectiveCamera looks down local -Z by default, same direction the lens cone points */}
-      <PerspectiveCamera makeDefault={lookingThrough} fov={50} />
+      <PerspectiveCamera ref={camRef} makeDefault={lookingThrough} fov={fov} />
     </group>
   );
 }
@@ -245,10 +250,11 @@ type SceneContentsProps = {
   onSelect: (id: number) => void;
   objRef: (id: number, obj: THREE.Object3D | null) => void;
   lookingThroughId: number | null;
+  cameraRef?: React.Ref<THREE.PerspectiveCamera>;
 };
 
 /** The room shell (lights, walls, floor) plus every scene object. */
-function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId }: SceneContentsProps) {
+function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId, cameraRef }: SceneContentsProps) {
   return (
     <>
       <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
@@ -297,11 +303,115 @@ function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId
             position={o.position}
             rotation={o.rotation}
             lookingThrough={o.id === lookingThroughId}
+            fov={o.fov ?? DEFAULT_FOV}
+            camRef={cameraRef}
           />
         );
       })}
     </>
   );
+}
+
+type MoveKind = "dolly-zoom" | "zoom" | "pan";
+
+type ActiveMove = {
+  kind: MoveKind;
+  start: number;
+  duration: number;
+  startPos: THREE.Vector3;
+  dir: THREE.Vector3;
+  d0: number;
+  fov0: number;
+  startYaw: number;
+};
+
+/**
+ * Drives the three camera-move presets by mutating the camera's live
+ * Object3D/PerspectiveCamera directly every frame (not via React state —
+ * that would mean a re-render per frame). `nodesRef`/`cameraId` are read
+ * inside useEffect/useFrame rather than resolved by the caller during
+ * render, since reading a ref's `.current` in a render body is unsound
+ * (see the syncSelectedTransform comment below for the same reasoning).
+ */
+function CameraMoveAnimator({
+  nodesRef,
+  cameraId,
+  camRef,
+  requestedMove,
+  onMoveArmed,
+  onMoveDone,
+}: {
+  nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
+  cameraId: number;
+  camRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  requestedMove: MoveKind | null;
+  onMoveArmed: () => void;
+  onMoveDone: (result: { position: Vec3; rotation: Vec3; fov: number }) => void;
+}) {
+  const active = useRef<ActiveMove | null>(null);
+
+  useEffect(() => {
+    const camNode = nodesRef.current.get(cameraId);
+    if (!requestedMove || !camNode || !camRef.current) return;
+    const startPos = camNode.position.clone();
+    const dir = new THREE.Vector3();
+    camNode.getWorldDirection(dir);
+    const focus = new THREE.Vector3(0, 1, 0);
+    active.current = {
+      kind: requestedMove,
+      start: performance.now(),
+      duration: requestedMove === "pan" ? 3000 : 2500,
+      startPos,
+      dir,
+      d0: startPos.distanceTo(focus),
+      fov0: camRef.current.fov,
+      startYaw: camNode.rotation.y,
+    };
+    onMoveArmed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedMove]);
+
+  useFrame(() => {
+    const m = active.current;
+    const camNode = nodesRef.current.get(cameraId);
+    if (!m || !camNode || !camRef.current) return;
+
+    const t = Math.min((performance.now() - m.start) / m.duration, 1);
+    const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // easeInOutQuad
+
+    if (m.kind === "zoom") {
+      // FOV only — a plain optical zoom, camera stays put.
+      camRef.current.fov = THREE.MathUtils.lerp(m.fov0, m.fov0 * 0.55, eased);
+      camRef.current.updateProjectionMatrix();
+    } else if (m.kind === "dolly-zoom") {
+      // Push toward the focus point while widening FOV to compensate, so the
+      // focus point stays the same apparent size and the background warps —
+      // the actual Vertigo/"trombone" effect, not just a plain push-in.
+      // Derivation: apparent size ∝ 1 / (distance · tan(fov/2)), so holding
+      // that product constant (k = d0·tan(fov0/2)) gives fov(t) from d(t).
+      const targetDist = m.d0 * 0.55;
+      const dist = THREE.MathUtils.lerp(m.d0, targetDist, eased);
+      camNode.position.copy(m.startPos).addScaledVector(m.dir, m.d0 - dist);
+      const k = m.d0 * Math.tan(THREE.MathUtils.degToRad(m.fov0) / 2);
+      camRef.current.fov = THREE.MathUtils.radToDeg(2 * Math.atan(k / dist));
+      camRef.current.updateProjectionMatrix();
+    } else if (m.kind === "pan") {
+      // Rotate in place — position and FOV untouched, matches swinging a
+      // camera on a fixed tripod head.
+      camNode.rotation.y = THREE.MathUtils.lerp(m.startYaw, m.startYaw + THREE.MathUtils.degToRad(40), eased);
+    }
+
+    if (t >= 1) {
+      active.current = null;
+      onMoveDone({
+        position: [camNode.position.x, camNode.position.y, camNode.position.z],
+        rotation: [camNode.rotation.x, camNode.rotation.y, camNode.rotation.z],
+        fov: camRef.current.fov,
+      });
+    }
+  });
+
+  return null;
 }
 
 /** Bottom-right readout of the selected object's live transform. */
@@ -341,6 +451,20 @@ function loadSavedObjects(): SceneObject[] {
   return INITIAL_OBJECTS;
 }
 
+/** Resolves after `n` animation frames — used to give a camera-swap a
+ * moment to actually render before we grab a photo/start recording from it. */
+function waitFrames(n: number): Promise<void> {
+  return new Promise((resolve) => {
+    let count = 0;
+    function tick() {
+      count++;
+      if (count >= n) resolve();
+      else requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
 export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -350,10 +474,16 @@ export function StageScene() {
   const [newBreadth, setNewBreadth] = useState(0.8);
   const [lookingThrough, setLookingThrough] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [requestedMove, setRequestedMove] = useState<MoveKind | null>(null);
 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
+  const cameraFovRef = useRef<THREE.PerspectiveCamera | null>(null);
+  // Whether capture/recording auto-entered camera view (vs. the user already
+  // being there) — only auto-entered sessions auto-exit when done.
+  const autoEnteredCameraView = useRef(false);
 
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -364,17 +494,31 @@ export function StageScene() {
     URL.revokeObjectURL(url);
   }
 
-  function capturePhoto() {
+  async function capturePhoto() {
+    if (!cameraObj) return;
+    const wasLookingThrough = lookingThrough;
+    if (!wasLookingThrough) {
+      setLookingThrough(true);
+      await waitFrames(3);
+    }
     canvasEl.current?.toBlob((blob) => {
       if (blob) downloadBlob(blob, `stage-photo-${Date.now()}.png`);
+      if (!wasLookingThrough) setLookingThrough(false);
     }, "image/png");
   }
 
-  function toggleRecording() {
+  async function toggleRecording() {
     if (isRecording) {
       mediaRecorder.current?.stop();
       return;
     }
+    if (!cameraObj) return;
+    const wasLookingThrough = lookingThrough;
+    if (!wasLookingThrough) {
+      setLookingThrough(true);
+      await waitFrames(3);
+    }
+    autoEnteredCameraView.current = !wasLookingThrough;
     const canvas = canvasEl.current;
     if (!canvas) return;
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
@@ -388,6 +532,7 @@ export function StageScene() {
     recorder.onstop = () => {
       downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.webm`);
       setIsRecording(false);
+      if (autoEnteredCameraView.current) setLookingThrough(false);
     };
     recorder.start();
     mediaRecorder.current = recorder;
@@ -448,9 +593,13 @@ export function StageScene() {
     setSelectedId(null);
   }
 
+  const cameraObj = objects.find((o) => o.kind === "camera") ?? null;
+  // Not tied to selection — capture/record and the move presets need to
+  // engage the camera's view regardless of what's currently selected.
+  const lookingThroughId = lookingThrough ? (cameraObj?.id ?? null) : null;
+
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
-  const lookingThroughId = lookingThrough && selected?.kind === "camera" ? selected.id : null;
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -504,6 +653,10 @@ export function StageScene() {
     setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, position: [x, y, z], rotation } : o)));
   }
 
+  function handleCameraMoveDone(result: { position: Vec3; rotation: Vec3; fov: number }) {
+    setObjects((prev) => prev.map((o) => (o.kind === "camera" ? { ...o, ...result } : o)));
+  }
+
   return (
     <div className="relative h-full w-full">
       <Canvas
@@ -538,6 +691,7 @@ export function StageScene() {
           onSelect={setSelectedId}
           objRef={setObjRef}
           lookingThroughId={lookingThroughId}
+          cameraRef={cameraFovRef}
         />
 
         {selectedNode && (
@@ -550,9 +704,21 @@ export function StageScene() {
           />
         )}
 
+        {cameraObj && (
+          <CameraMoveAnimator
+            nodesRef={nodes}
+            cameraId={cameraObj.id}
+            camRef={cameraFovRef}
+            requestedMove={requestedMove}
+            onMoveArmed={() => setRequestedMove(null)}
+            onMoveDone={handleCameraMoveDone}
+          />
+        )}
+
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
 
+      {/* Manipulation tools: transform mode, camera view + capture, reset */}
       <div className="absolute bottom-16 left-6 flex items-center gap-3">
         <div className="flex rounded-full border border-border bg-bg-panel p-1">
           {(["translate", "rotate"] as const).map((mode) => (
@@ -569,37 +735,26 @@ export function StageScene() {
           ))}
         </div>
 
-        {selected?.kind === "camera" && (
-          <button
-            onClick={() => setLookingThrough((v) => !v)}
-            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-          >
-            {lookingThrough ? "Exit camera view" : "Look through camera"}
-          </button>
-        )}
-        {lookingThrough && selected?.kind !== "camera" && (
-          <button
-            onClick={() => setLookingThrough(false)}
-            className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-          >
-            Exit camera view
-          </button>
-        )}
-
-        {lookingThrough && (
-          <div className="flex items-center gap-2">
+        {cameraObj && (
+          <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
+            <button
+              onClick={() => setLookingThrough((v) => !v)}
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                lookingThrough ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+              }`}
+            >
+              {lookingThrough ? "Exit camera view" : "Camera view"}
+            </button>
             <button
               onClick={capturePhoto}
-              className="rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
             >
               Capture photo
             </button>
             <button
               onClick={toggleRecording}
-              className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                isRecording
-                  ? "border-accent bg-accent text-bg"
-                  : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                isRecording ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
               }`}
             >
               {isRecording ? "● Stop recording" : "Record clip"}
@@ -615,44 +770,82 @@ export function StageScene() {
         </button>
       </div>
 
-      {/* Inventory: pick what to add, and the dimensions it spawns with (L/B only affect boxes) */}
-      <div className="absolute bottom-6 left-6 flex items-center gap-3">
-        <div className="flex items-center gap-2 rounded-full border border-border bg-bg-panel py-1 pl-3 pr-1">
-          {([
-            ["Size", newSize, setNewSize],
-            ["L", newLength, setNewLength],
-            ["B", newBreadth, setNewBreadth],
-          ] as const).map(([label, value, setValue]) => (
-            <span key={label} className="flex items-center gap-1">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
-              <input
-                type="number"
-                min={0.2}
-                max={2}
-                step={0.1}
-                value={value}
-                onChange={(e) => setValue(Number(e.target.value) || DEFAULT_SIZE.box)}
-                className="w-11 rounded-full bg-transparent px-1 py-1 text-[10px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-            </span>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
-          <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Inventory</span>
-          {([
-            ["box", "Box"],
-            ["ball", "Ball"],
-            ["mannequin", "Mannequin"],
-          ] as const).map(([kind, label]) => (
+      {/* Creation tools: canned camera moves, and the inventory to add new objects */}
+      <div className="absolute bottom-6 left-6 flex items-end gap-3">
+        {cameraObj && (
+          <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
+            <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Camera moves</span>
             <button
-              key={kind}
-              onClick={() => addFromInventory(kind)}
+              onClick={() => setRequestedMove("dolly-zoom")}
               className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
             >
-              + {label}
+              Dolly zoom
             </button>
-          ))}
+            <button
+              onClick={() => setRequestedMove("zoom")}
+              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
+            >
+              Zoom
+            </button>
+            <button
+              onClick={() => setRequestedMove("pan")}
+              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
+            >
+              Pan
+            </button>
+          </div>
+        )}
+
+        <div className="relative">
+          {inventoryOpen && (
+            <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
+              <div className="flex items-center gap-2">
+                {([
+                  ["Size", newSize, setNewSize],
+                  ["L", newLength, setNewLength],
+                  ["B", newBreadth, setNewBreadth],
+                ] as const).map(([label, value, setValue]) => (
+                  <span key={label} className="flex items-center gap-1 rounded-full border border-border py-1 pl-3 pr-1">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                    <input
+                      type="number"
+                      min={0.2}
+                      max={2}
+                      step={0.1}
+                      value={value}
+                      onChange={(e) => setValue(Number(e.target.value) || DEFAULT_SIZE.box)}
+                      className="w-11 rounded-full bg-transparent px-1 py-1 text-[10px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                {([
+                  ["box", "Box"],
+                  ["ball", "Ball"],
+                  ["mannequin", "Mannequin"],
+                ] as const).map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    onClick={() => addFromInventory(kind)}
+                    className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+                  >
+                    + {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => setInventoryOpen((v) => !v)}
+            className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+              inventoryOpen
+                ? "border-accent bg-accent text-bg"
+                : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
+            }`}
+          >
+            {inventoryOpen ? "× Inventory" : "+ Inventory"}
+          </button>
         </div>
       </div>
 
