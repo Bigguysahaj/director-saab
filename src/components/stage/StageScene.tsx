@@ -24,8 +24,9 @@ const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
 const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
 // are ignored instead of crashing on load. v2 adds mannequin `pose` and
-// `keyframes` — both optional, but old saves are dropped anyway per convention.
-const STORAGE_KEY = "director-stage-layout-v2";
+// `keyframes`; v3 adds `castId` — all optional, but old saves are dropped
+// anyway per convention.
+const STORAGE_KEY = "director-stage-layout-v3";
 
 const JOINT_LABELS: Record<JointKey, string> = {
   leftArm: "Left arm",
@@ -493,7 +494,7 @@ export function StageScene() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
   const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
-  const [stopStyle, setStopStyle] = useState<StopStyle>("quad");
+  const [stopStyle, setStopStyle] = useState<StopStyle>("linear");
   // Mirrors holdRef for UI highlighting only — the physics itself never
   // reads this, so it doesn't need to update every frame.
   const [activeHoldKind, setActiveHoldKind] = useState<MoveKind | null>(null);
@@ -1106,7 +1107,16 @@ export function StageScene() {
           </button>
         </div>
 
-        <CastPanel open={castOpen} onToggle={() => setCastOpen((v) => !v)} />
+        <CastPanel
+          open={castOpen}
+          onToggle={() => setCastOpen((v) => !v)}
+          canAssign={selected?.kind === "mannequin"}
+          assignedId={selected?.kind === "mannequin" ? (selected.castId ?? null) : null}
+          onAssign={(castId) => {
+            if (!selected || selected.kind !== "mannequin") return;
+            setObjects((prev) => prev.map((o) => (o.id === selected.id ? { ...o, castId: castId ?? undefined } : o)));
+          }}
+        />
       </div>
 
       {selected && canKeyframeSelection && (

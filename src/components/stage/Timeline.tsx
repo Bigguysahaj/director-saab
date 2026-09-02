@@ -109,14 +109,14 @@ export function Timeline({
           <button
             onClick={onAddKey}
             title="Set a keyframe at the current time from this object's live pose"
-            className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+            className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg transition-colors hover:border-accent"
           >
             + Key
           </button>
           <button
             onClick={onDeleteKey}
             disabled={!hasKeyframeAtPlayhead}
-            className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg disabled:opacity-30 disabled:hover:border-border disabled:hover:text-fg-dim"
+            className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg transition-colors hover:border-accent disabled:opacity-30 disabled:hover:border-border"
           >
             − Key
           </button>

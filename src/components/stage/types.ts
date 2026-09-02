@@ -22,6 +22,7 @@ export type SceneObject = {
   fov?: number; // camera only
   pose?: MannequinPose; // mannequin only — static rig pose, not keyframed
   keyframes?: Keyframe[]; // box/ball/mannequin only, sorted by time
+  castId?: string; // mannequin only — id into the /audition roster (src/lib/cast.ts), metadata only for now
 };
 
 // Preserves the mannequin's original hardcoded arm tilt as its rest pose, so
