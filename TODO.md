@@ -17,19 +17,32 @@ already mirror themselves to whichever side is camera-facing as you orbit,
 no custom code needed for that. Design notes:
 https://rystorm.com/blog/translate-gizmo-design.
 
-- **Props (box/ball):** free drag, live X/Y/Z readout, adjustable size (a
-  "Size" field feeds the `+ Box` / `+ Ball` spawn buttons — box side / ball
-  radius). Ctrl+drag leaves a duplicate behind at the start position.
+- **Props (box/ball):** free drag, live X/Y/Z readout. Boxes can be
+  stretched into cuboids via the Inventory row's Size (height) / L (X) / B
+  (Z) inputs. Ctrl+drag leaves a duplicate behind at the start position.
+- **Mannequin:** a plain stand-in figure (head/torso/arms/legs from
+  primitives) for blocking where a person goes. Moves/rotates as one unit —
+  not a rig. **Future plan:** posable joints (per-limb rotation, maybe a
+  simple IK for arms/legs) so it can actually act, not just stand there.
 - **Light stands:** move and rotate to re-aim — the spotlight's target is a
   child Object3D of the stand's group (not a fixed world point), so the beam
   actually turns with it.
 - **Camera marker:** move/rotate like anything else, plus a "Look through
   camera" toggle that swaps the whole viewport to that camera's POV
   (`makeDefault` flips between the main orbit camera and the marker's own
-  nested `PerspectiveCamera`; `OrbitControls` disables while active). A
-  picture-in-picture version via drei's `<View>` portal
+  nested `PerspectiveCamera`; `OrbitControls` disables while active). While
+  active: "Capture photo" (canvas.toBlob → PNG download) and "Record clip"
+  (canvas.captureStream + MediaRecorder → webm download, auto-stops if you
+  exit camera view mid-recording). A picture-in-picture version of the
+  camera view via drei's `<View>` portal
   (https://drei.docs.pmnd.rs/portals/view) was tried and worked, then pulled
   back out — user wants to build that part themselves.
+- **Inventory:** a toolbar row (Size/L/B dimension inputs + Box/Ball/
+  Mannequin buttons) for adding new objects, replacing the old inline
+  +Box/+Ball buttons. **Future plan:** keyframing — record a shape's (or
+  the mannequin's) position/rotation at chosen points in time and animate
+  between them, so scenes can have simple blocked-out motion instead of
+  being fully static.
 - **Layout persistence:** every change (drag, rotate, add, duplicate)
   auto-saves to `localStorage`; "Reset layout" clears it and returns to the
   default arrangement.
