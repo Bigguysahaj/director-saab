@@ -312,103 +312,91 @@ function SceneContents({ objects, selectedId, onSelect, objRef, lookingThroughId
   );
 }
 
-type MoveKind = "dolly-zoom" | "zoom" | "pan";
+type MoveKind = "dolly-zoom-in" | "zoom" | "pan";
+type StopStyle = "linear" | "quad";
 
-type ActiveMove = {
+// Key bound to each move — held down (not clicked) to run it.
+const MOVE_KEYS: Record<string, MoveKind> = { i: "dolly-zoom-in", z: "zoom", p: "pan" };
+const MOVE_LABELS: Record<MoveKind, string> = { "dolly-zoom-in": "Dolly zoom in (I)", zoom: "Zoom (Z)", pan: "Pan (P)" };
+// How fast each move progresses per second while held.
+const MOVE_RATES: Record<MoveKind, number> = { "dolly-zoom-in": 0.7, zoom: 14, pan: 24 };
+const STOP_DECAY_MS = 400; // "quad" stop style eases the rate to 0 over this long
+const MIN_FOV = 8;
+const MAX_FOV = 100;
+const MIN_DOLLY_DIST = 0.5;
+
+type HoldState = {
   kind: MoveKind;
-  start: number;
-  duration: number;
-  startPos: THREE.Vector3;
-  dir: THREE.Vector3;
-  d0: number;
-  fov0: number;
-  startYaw: number;
+  phase: "hold" | "decay";
+  decayStart?: number;
+  rateAtRelease?: number;
+  k?: number; // dolly-zoom-in only: apparent-size constant fixed at grab time
 };
 
 /**
- * Drives the three camera-move presets by mutating the camera's live
- * Object3D/PerspectiveCamera directly every frame (not via React state —
- * that would mean a re-render per frame). `nodesRef`/`cameraId` are read
- * inside useEffect/useFrame rather than resolved by the caller during
- * render, since reading a ref's `.current` in a render body is unsound
- * (see the syncSelectedTransform comment below for the same reasoning).
+ * Drives whichever camera move is currently held by mutating the camera's
+ * live Object3D/PerspectiveCamera directly every frame (not via React state
+ * — that would mean a re-render per frame). `holdRef` is written from
+ * outside (keyboard/mouse handlers in StageScene) and read here every
+ * frame; `nodesRef`/`cameraIdRef` are dereferenced inside useFrame rather
+ * than resolved by the caller during render, since reading a ref's
+ * `.current` in a render body is unsound (see the syncSelectedTransform
+ * comment below for the same reasoning).
  */
-function CameraMoveAnimator({
+function HoldMoveAnimator({
   nodesRef,
-  cameraId,
+  cameraIdRef,
   camRef,
-  requestedMove,
-  onMoveArmed,
-  onMoveDone,
+  holdRef,
+  onSettled,
 }: {
   nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
-  cameraId: number;
+  cameraIdRef: React.RefObject<number | null>;
   camRef: React.RefObject<THREE.PerspectiveCamera | null>;
-  requestedMove: MoveKind | null;
-  onMoveArmed: () => void;
-  onMoveDone: (result: { position: Vec3; rotation: Vec3; fov: number }) => void;
+  holdRef: React.RefObject<HoldState | null>;
+  onSettled: () => void;
 }) {
-  const active = useRef<ActiveMove | null>(null);
-
-  useEffect(() => {
+  useFrame((_, delta) => {
+    const hold = holdRef.current;
+    const cameraId = cameraIdRef.current;
+    if (!hold || cameraId === null) return;
     const camNode = nodesRef.current.get(cameraId);
-    if (!requestedMove || !camNode || !camRef.current) return;
-    const startPos = camNode.position.clone();
-    const dir = new THREE.Vector3();
-    camNode.getWorldDirection(dir);
-    const focus = new THREE.Vector3(0, 1, 0);
-    active.current = {
-      kind: requestedMove,
-      start: performance.now(),
-      duration: requestedMove === "pan" ? 3000 : 2500,
-      startPos,
-      dir,
-      d0: startPos.distanceTo(focus),
-      fov0: camRef.current.fov,
-      startYaw: camNode.rotation.y,
-    };
-    onMoveArmed();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedMove]);
+    const cam = camRef.current;
+    if (!camNode || !cam) return;
 
-  useFrame(() => {
-    const m = active.current;
-    const camNode = nodesRef.current.get(cameraId);
-    if (!m || !camNode || !camRef.current) return;
+    let rate = MOVE_RATES[hold.kind];
+    if (hold.phase === "decay") {
+      const t = Math.min((performance.now() - hold.decayStart!) / STOP_DECAY_MS, 1);
+      const remaining = 1 - t;
+      rate = hold.rateAtRelease! * remaining * remaining; // quad ease-out
+      if (t >= 1) holdRef.current = null;
+    }
 
-    const t = Math.min((performance.now() - m.start) / m.duration, 1);
-    const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // easeInOutQuad
-
-    if (m.kind === "zoom") {
+    if (hold.kind === "zoom") {
       // FOV only — a plain optical zoom, camera stays put.
-      camRef.current.fov = THREE.MathUtils.lerp(m.fov0, m.fov0 * 0.55, eased);
-      camRef.current.updateProjectionMatrix();
-    } else if (m.kind === "dolly-zoom") {
-      // Push toward the focus point while widening FOV to compensate, so the
-      // focus point stays the same apparent size and the background warps —
-      // the actual Vertigo/"trombone" effect, not just a plain push-in.
+      cam.fov = THREE.MathUtils.clamp(cam.fov - rate * delta, MIN_FOV, MAX_FOV);
+      cam.updateProjectionMatrix();
+    } else if (hold.kind === "pan") {
+      // Rotate in place — position/FOV untouched, matches swinging a camera
+      // on a fixed tripod head.
+      camNode.rotation.y += THREE.MathUtils.degToRad(rate * delta);
+    } else if (hold.kind === "dolly-zoom-in" && hold.k !== undefined) {
+      // Push toward the focus point while widening FOV to compensate, so
+      // the focus point stays the same apparent size and the background
+      // warps — the actual Vertigo/"trombone" effect, not a plain push-in.
       // Derivation: apparent size ∝ 1 / (distance · tan(fov/2)), so holding
-      // that product constant (k = d0·tan(fov0/2)) gives fov(t) from d(t).
-      const targetDist = m.d0 * 0.55;
-      const dist = THREE.MathUtils.lerp(m.d0, targetDist, eased);
-      camNode.position.copy(m.startPos).addScaledVector(m.dir, m.d0 - dist);
-      const k = m.d0 * Math.tan(THREE.MathUtils.degToRad(m.fov0) / 2);
-      camRef.current.fov = THREE.MathUtils.radToDeg(2 * Math.atan(k / dist));
-      camRef.current.updateProjectionMatrix();
-    } else if (m.kind === "pan") {
-      // Rotate in place — position and FOV untouched, matches swinging a
-      // camera on a fixed tripod head.
-      camNode.rotation.y = THREE.MathUtils.lerp(m.startYaw, m.startYaw + THREE.MathUtils.degToRad(40), eased);
+      // that product constant (k, fixed at grab time) gives fov from dist.
+      const dir = new THREE.Vector3();
+      camNode.getWorldDirection(dir);
+      const focus = new THREE.Vector3(0, 1, 0);
+      const dist = camNode.position.distanceTo(focus);
+      const newDist = Math.max(MIN_DOLLY_DIST, dist - rate * delta);
+      camNode.position.addScaledVector(dir, dist - newDist);
+      cam.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(hold.k / newDist)), MIN_FOV, MAX_FOV);
+      cam.updateProjectionMatrix();
     }
 
-    if (t >= 1) {
-      active.current = null;
-      onMoveDone({
-        position: [camNode.position.x, camNode.position.y, camNode.position.z],
-        rotation: [camNode.rotation.x, camNode.rotation.y, camNode.rotation.z],
-        fov: camRef.current.fov,
-      });
-    }
+    if (!holdRef.current) onSettled();
   });
 
   return null;
@@ -475,7 +463,11 @@ export function StageScene() {
   const [lookingThrough, setLookingThrough] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [requestedMove, setRequestedMove] = useState<MoveKind | null>(null);
+  const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
+  const [stopStyle, setStopStyle] = useState<StopStyle>("quad");
+  // Mirrors holdRef for UI highlighting only — the physics itself never
+  // reads this, so it doesn't need to update every frame.
+  const [activeHoldKind, setActiveHoldKind] = useState<MoveKind | null>(null);
 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -484,6 +476,11 @@ export function StageScene() {
   // Whether capture/recording auto-entered camera view (vs. the user already
   // being there) — only auto-entered sessions auto-exit when done.
   const autoEnteredCameraView = useRef(false);
+  const holdRef = useRef<HoldState | null>(null);
+  const stopStyleRef = useRef<StopStyle>(stopStyle);
+  useEffect(() => {
+    stopStyleRef.current = stopStyle;
+  }, [stopStyle]);
 
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -550,7 +547,6 @@ export function StageScene() {
   const ctrlHeld = useRef(false);
   const nextId = useRef(Math.max(1000, ...objects.map((o) => o.id + 1)));
   useEffect(() => {
-    const setFlag = (e: KeyboardEvent) => (ctrlHeld.current = e.ctrlKey);
     const handleKeydown = (e: KeyboardEvent) => {
       ctrlHeld.current = e.ctrlKey;
       const target = e.target as HTMLElement | null;
@@ -558,14 +554,33 @@ export function StageScene() {
       if (e.key === "r" || e.key === "R") {
         setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
       }
+      const kind = MOVE_KEYS[e.key.toLowerCase()];
+      if (kind) startHold(kind);
+    };
+    const handleKeyup = (e: KeyboardEvent) => {
+      ctrlHeld.current = e.ctrlKey;
+      const kind = MOVE_KEYS[e.key.toLowerCase()];
+      if (kind) stopHold(kind);
+    };
+    // A held key/mouse-button whose release event never fires (alt-tabbing
+    // away mid-hold) would otherwise leave the move stuck running forever.
+    const handleBlur = () => {
+      ctrlHeld.current = false;
+      if (holdRef.current) {
+        holdRef.current = null;
+        setActiveHoldKind(null);
+        syncCameraFromLive();
+      }
     };
     window.addEventListener("keydown", handleKeydown);
-    window.addEventListener("keyup", setFlag);
-    window.addEventListener("blur", () => (ctrlHeld.current = false));
+    window.addEventListener("keyup", handleKeyup);
+    window.addEventListener("blur", handleBlur);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
-      window.removeEventListener("keyup", setFlag);
+      window.removeEventListener("keyup", handleKeyup);
+      window.removeEventListener("blur", handleBlur);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-save on every change (drag, rotate, add, duplicate).
@@ -597,6 +612,14 @@ export function StageScene() {
   // Not tied to selection — capture/record and the move presets need to
   // engage the camera's view regardless of what's currently selected.
   const lookingThroughId = lookingThrough ? (cameraObj?.id ?? null) : null;
+
+  // Mirrored into a ref (same reasoning as stopStyleRef above) so the
+  // mount-once keydown/keyup listeners always see the current camera id
+  // without needing to be torn down and rebuilt on every objects change.
+  const cameraIdRef = useRef<number | null>(cameraObj?.id ?? null);
+  useEffect(() => {
+    cameraIdRef.current = cameraObj?.id ?? null;
+  }, [cameraObj?.id]);
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
   const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
@@ -653,8 +676,52 @@ export function StageScene() {
     setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, position: [x, y, z], rotation } : o)));
   }
 
-  function handleCameraMoveDone(result: { position: Vec3; rotation: Vec3; fov: number }) {
-    setObjects((prev) => prev.map((o) => (o.kind === "camera" ? { ...o, ...result } : o)));
+  // Persists the camera's live (imperatively-mutated) transform/FOV back
+  // into React state once a hold move fully stops — same idea as
+  // syncSelectedTransform, just for whichever move just finished.
+  function syncCameraFromLive() {
+    const cameraId = cameraIdRef.current;
+    if (cameraId === null) return;
+    const camNode = nodes.current.get(cameraId);
+    const cam = cameraFovRef.current;
+    if (!camNode || !cam) return;
+    const position: Vec3 = [camNode.position.x, camNode.position.y, camNode.position.z];
+    const rotation: Vec3 = [camNode.rotation.x, camNode.rotation.y, camNode.rotation.z];
+    setObjects((prev) => prev.map((o) => (o.id === cameraId ? { ...o, position, rotation, fov: cam.fov } : o)));
+  }
+
+  // Grabbed on keydown/mousedown. Ignores a repeat trigger for the move
+  // already in progress (keyboard auto-repeat would otherwise re-arm
+  // dolly-zoom-in's fixed `k` constant every ~30ms).
+  function startHold(kind: MoveKind) {
+    const cameraId = cameraIdRef.current;
+    if (cameraId === null) return;
+    const camNode = nodes.current.get(cameraId);
+    const cam = cameraFovRef.current;
+    if (!camNode || !cam) return;
+    if (holdRef.current?.kind === kind && holdRef.current.phase === "hold") return;
+
+    const state: HoldState = { kind, phase: "hold" };
+    if (kind === "dolly-zoom-in") {
+      const focus = new THREE.Vector3(0, 1, 0);
+      const d0 = camNode.position.distanceTo(focus);
+      state.k = d0 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    }
+    holdRef.current = state;
+    setActiveHoldKind(kind);
+  }
+
+  // Released on keyup/mouseup/mouseleave. "linear" stops immediately;
+  // "quad" hands off to HoldMoveAnimator's decay phase for a smoother stop.
+  function stopHold(kind: MoveKind) {
+    if (holdRef.current?.kind !== kind || holdRef.current.phase !== "hold") return;
+    if (stopStyleRef.current === "linear") {
+      holdRef.current = null;
+      syncCameraFromLive();
+    } else {
+      holdRef.current = { ...holdRef.current, phase: "decay", decayStart: performance.now(), rateAtRelease: MOVE_RATES[kind] };
+    }
+    setActiveHoldKind(null);
   }
 
   return (
@@ -705,13 +772,12 @@ export function StageScene() {
         )}
 
         {cameraObj && (
-          <CameraMoveAnimator
+          <HoldMoveAnimator
             nodesRef={nodes}
-            cameraId={cameraObj.id}
+            cameraIdRef={cameraIdRef}
             camRef={cameraFovRef}
-            requestedMove={requestedMove}
-            onMoveArmed={() => setRequestedMove(null)}
-            onMoveDone={handleCameraMoveDone}
+            holdRef={holdRef}
+            onSettled={syncCameraFromLive}
           />
         )}
 
@@ -773,25 +839,51 @@ export function StageScene() {
       {/* Creation tools: canned camera moves, and the inventory to add new objects */}
       <div className="absolute bottom-6 left-6 flex items-end gap-3">
         {cameraObj && (
-          <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
-            <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Camera moves</span>
+          <div className="relative">
+            {cameraMovesOpen && (
+              <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
+                <div className="flex items-center gap-1">
+                  <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Hold</span>
+                  {(["dolly-zoom-in", "zoom", "pan"] as const).map((kind) => (
+                    <button
+                      key={kind}
+                      onMouseDown={() => startHold(kind)}
+                      onMouseUp={() => stopHold(kind)}
+                      onMouseLeave={() => stopHold(kind)}
+                      className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                        activeHoldKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                      }`}
+                    >
+                      {MOVE_LABELS[kind]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Stop</span>
+                  {(["linear", "quad"] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setStopStyle(s)}
+                      title={s === "linear" ? "Stops abruptly the instant you release" : "Eases to a stop over ~0.4s"}
+                      className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                        stopStyle === s ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                      }`}
+                    >
+                      {s === "linear" ? "Linear" : "Quad"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <button
-              onClick={() => setRequestedMove("dolly-zoom")}
-              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
+              onClick={() => setCameraMovesOpen((v) => !v)}
+              className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                cameraMovesOpen
+                  ? "border-accent bg-accent text-bg"
+                  : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
+              }`}
             >
-              Dolly zoom
-            </button>
-            <button
-              onClick={() => setRequestedMove("zoom")}
-              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
-            >
-              Zoom
-            </button>
-            <button
-              onClick={() => setRequestedMove("pan")}
-              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
-            >
-              Pan
+              {cameraMovesOpen ? "× Camera moves" : "+ Camera moves"}
             </button>
           </div>
         )}
