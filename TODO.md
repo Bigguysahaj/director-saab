@@ -23,11 +23,13 @@ https://rystorm.com/blog/translate-gizmo-design.
 - **Light stands:** move and rotate to re-aim — the spotlight's target is a
   child Object3D of the stand's group (not a fixed world point), so the beam
   actually turns with it.
-- **Camera marker:** move/rotate like anything else. Purely a placeable prop
-  for now — no viewfinder/preview yet. A picture-in-picture viewer via drei's
-  `<View>` portal (https://drei.docs.pmnd.rs/portals/view) was tried and
-  worked, then pulled back out — user wants to build the actual
-  camera-viewing feature themselves.
+- **Camera marker:** move/rotate like anything else, plus a "Look through
+  camera" toggle that swaps the whole viewport to that camera's POV
+  (`makeDefault` flips between the main orbit camera and the marker's own
+  nested `PerspectiveCamera`; `OrbitControls` disables while active). A
+  picture-in-picture version via drei's `<View>` portal
+  (https://drei.docs.pmnd.rs/portals/view) was tried and worked, then pulled
+  back out — user wants to build that part themselves.
 - **Layout persistence:** every change (drag, rotate, add, duplicate)
   auto-saves to `localStorage`; "Reset layout" clears it and returns to the
   default arrangement.
