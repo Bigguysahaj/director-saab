@@ -293,8 +293,7 @@ function SceneContents({
   );
 }
 
-type MoveKind = "dolly-zoom-in" | "dolly-zoom-out" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right";
-type StopStyle = "linear" | "quad";
+type MoveKind = "dolly-zoom-in" | "dolly-zoom-out" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right" | "pan-top" | "pan-bottom" | "roll-left" | "roll-right";
 
 // Key bound to each move — held down (not clicked) to run it.
 const MOVE_KEYS: Record<string, MoveKind> = {
@@ -304,6 +303,10 @@ const MOVE_KEYS: Record<string, MoveKind> = {
   x: "zoom-out",
   p: "pan-right",
   l: "pan-left",
+  t: "pan-top",
+  b: "pan-bottom",
+  w: "roll-right",
+  e: "roll-left",
 };
 // Short label shown on each button — paired with the row's own move-name label.
 const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
@@ -313,23 +316,32 @@ const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
   "zoom-out": "Out (X)",
   "pan-left": "Left (L)",
   "pan-right": "Right (P)",
+  "pan-top": "Top (T)",
+  "pan-bottom": "Bottom (B)",
+  "roll-left": "Left (E)",
+  "roll-right": "Right (W)",
 };
 // Row groupings for the popover: [negative-direction kind, positive-direction kind, row label].
 const MOVE_ROWS = [
   ["dolly-zoom-out", "dolly-zoom-in", "Dolly zoom"],
   ["zoom-out", "zoom-in", "Zoom"],
+  ["pan-top", "pan-bottom", "Tilt"],
   ["pan-left", "pan-right", "Pan"],
+  ["roll-left", "roll-right", "Roll"],
 ] as const;
 // How fast each move progresses per second while held.
 const MOVE_RATES: Record<MoveKind, number> = {
-  "dolly-zoom-in": 0.7,
-  "dolly-zoom-out": 0.7,
+  "dolly-zoom-in": 2,
+  "dolly-zoom-out": 2,
   "zoom-in": 14,
   "zoom-out": 14,
   "pan-left": 24,
   "pan-right": 24,
+  "pan-top": 24,
+  "pan-bottom": 24,
+  "roll-left": 24,
+  "roll-right": 24,
 };
-const STOP_DECAY_MS = 400; // "quad" stop style eases the rate to 0 over this long
 const MIN_FOV = 8;
 const MAX_FOV = 100;
 const MIN_DOLLY_DIST = 0.5;
@@ -337,10 +349,38 @@ const MAX_DOLLY_DIST = 10;
 
 type HoldState = {
   kind: MoveKind;
-  phase: "hold" | "decay";
-  decayStart?: number;
-  rateAtRelease?: number;
   k?: number; // dolly-zoom-in/out only: apparent-size constant fixed at grab time
+};
+
+// Whip moves: one click plays a short, eased, self-terminating sweep —
+// unlike a MoveKind hold, they don't run for as long as you hold them down.
+type WhipKind = "whip-pan-left" | "whip-pan-right" | "whip-dolly-zoom-in" | "whip-dolly-zoom-out";
+const WHIP_SHORT_LABELS: Record<WhipKind, string> = {
+  "whip-pan-left": "Left",
+  "whip-pan-right": "Right",
+  "whip-dolly-zoom-in": "In",
+  "whip-dolly-zoom-out": "Out",
+};
+const WHIP_ROWS = [
+  ["whip-dolly-zoom-out", "whip-dolly-zoom-in", "Dolly zoom"],
+  ["whip-pan-left", "whip-pan-right", "Pan"],
+] as const;
+const WHIP_DURATION_MS = 220;
+const WHIP_PAN_ANGLE_DEG = 45;
+const WHIP_DOLLY_FACTOR = 2; // whip-in halves distance to focus, whip-out doubles it
+
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+type WhipState = {
+  kind: WhipKind;
+  start: number; // performance.now() at click
+  from: number; // starting rotation.y (pan) or distance-to-focus (dolly)
+  to: number; // eased target for the same quantity
+  k?: number; // dolly only: apparent-size constant fixed at click, as with HoldState
+  focus?: THREE.Vector3; // dolly only
+  dir?: THREE.Vector3; // dolly only: fixed unit vector from focus out to the camera's start position
 };
 
 /**
@@ -358,13 +398,11 @@ function HoldMoveAnimator({
   cameraIdRef,
   camRef,
   holdRef,
-  onSettled,
 }: {
   nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
   cameraIdRef: React.RefObject<number | null>;
   camRef: React.RefObject<THREE.PerspectiveCamera | null>;
   holdRef: React.RefObject<HoldState | null>;
-  onSettled: () => void;
 }) {
   // Reused every frame instead of `new THREE.Vector3()` inside useFrame —
   // allocating there was GC pressure on every single frame of a held dolly
@@ -381,13 +419,7 @@ function HoldMoveAnimator({
     const cam = camRef.current;
     if (!camNode || !cam) return;
 
-    let rate = MOVE_RATES[hold.kind];
-    if (hold.phase === "decay") {
-      const t = Math.min((performance.now() - hold.decayStart!) / STOP_DECAY_MS, 1);
-      const remaining = 1 - t;
-      rate = hold.rateAtRelease! * remaining * remaining; // quad ease-out
-      if (t >= 1) holdRef.current = null;
-    }
+    const rate = MOVE_RATES[hold.kind];
 
     if (hold.kind === "zoom-in" || hold.kind === "zoom-out") {
       // FOV only — a plain optical zoom, camera stays put.
@@ -399,23 +431,86 @@ function HoldMoveAnimator({
       // on a fixed tripod head.
       const sign = hold.kind === "pan-right" ? 1 : -1;
       camNode.rotation.y += sign * THREE.MathUtils.degToRad(rate * delta);
+    } else if (hold.kind === "pan-top" || hold.kind === "pan-bottom") {
+      // Tilt — same idea as pan, but around the local X axis.
+      const sign = hold.kind === "pan-top" ? 1 : -1;
+      camNode.rotation.x += sign * THREE.MathUtils.degToRad(rate * delta);
+    } else if (hold.kind === "roll-left" || hold.kind === "roll-right") {
+      // Roll — rotate around the local Z axis.
+      const sign = hold.kind === "roll-right" ? 1 : -1;
+      camNode.rotation.z += sign * THREE.MathUtils.degToRad(rate * delta);
     } else if ((hold.kind === "dolly-zoom-in" || hold.kind === "dolly-zoom-out") && hold.k !== undefined) {
       // Move along the focus axis while adjusting FOV to compensate, so the
       // focus point stays the same apparent size and the background warps —
       // the actual Vertigo/"trombone" effect, not a plain push-in/pull-out.
       // Derivation: apparent size ∝ 1 / (distance · tan(fov/2)), so holding
       // that product constant (k, fixed at grab time) gives fov from dist.
+      //
+      // Must track straight toward/away from the focus point, NOT the
+      // camera's facing direction — the camera is basically never aimed
+      // exactly at the focus (even the default pose is off by a few
+      // degrees, more so after a pan/tilt/roll). Sliding along facing-
+      // direction instead of the to-focus radius let position drift past
+      // the ray's closest approach to the focus; once past that point,
+      // moving further in the same fixed forward direction *increased*
+      // distance-to-focus while the loop still thought it was dollying in,
+      // so it kept pushing forward — a feedback runaway on long holds.
       const sign = hold.kind === "dolly-zoom-in" ? -1 : 1;
-      const dir = camNode.getWorldDirection(dirRef.current);
       const focus = focusRef.current;
+      const dir = dirRef.current.subVectors(focus, camNode.position).normalize();
       const dist = camNode.position.distanceTo(focus);
       const newDist = THREE.MathUtils.clamp(dist + sign * rate * delta, MIN_DOLLY_DIST, MAX_DOLLY_DIST);
       camNode.position.addScaledVector(dir, dist - newDist);
       cam.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(hold.k / newDist)), MIN_FOV, MAX_FOV);
       cam.updateProjectionMatrix();
     }
+  });
 
-    if (!holdRef.current) onSettled();
+  return null;
+}
+
+/** Drives a whip move: unlike HoldMoveAnimator, this runs to completion on
+ * its own timer once started — from/to and duration are fixed at click time
+ * (startWhip), so this component just interpolates between them every frame
+ * with an ease-in/ease-out curve and clears itself (and calls onSettled)
+ * when the timer runs out. */
+function WhipMoveAnimator({
+  nodesRef,
+  cameraIdRef,
+  camRef,
+  whipRef,
+  onSettled,
+}: {
+  nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
+  cameraIdRef: React.RefObject<number | null>;
+  camRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  whipRef: React.RefObject<WhipState | null>;
+  onSettled: () => void;
+}) {
+  useFrame(() => {
+    const whip = whipRef.current;
+    const cameraId = cameraIdRef.current;
+    if (!whip || cameraId === null) return;
+    const camNode = nodesRef.current.get(cameraId);
+    const cam = camRef.current;
+    if (!camNode || !cam) return;
+
+    const t = Math.min((performance.now() - whip.start) / WHIP_DURATION_MS, 1);
+    const eased = easeInOutCubic(t);
+
+    if (whip.kind === "whip-pan-left" || whip.kind === "whip-pan-right") {
+      camNode.rotation.y = whip.from + (whip.to - whip.from) * eased;
+    } else if (whip.k !== undefined && whip.focus && whip.dir) {
+      const dist = whip.from + (whip.to - whip.from) * eased;
+      camNode.position.copy(whip.focus).addScaledVector(whip.dir, dist);
+      cam.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(whip.k / dist)), MIN_FOV, MAX_FOV);
+      cam.updateProjectionMatrix();
+    }
+
+    if (t >= 1) {
+      whipRef.current = null;
+      onSettled();
+    }
   });
 
   return null;
@@ -500,10 +595,11 @@ export function StageScene() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
   const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
-  const [stopStyle, setStopStyle] = useState<StopStyle>("linear");
   // Mirrors holdRef for UI highlighting only — the physics itself never
   // reads this, so it doesn't need to update every frame.
   const [activeHoldKind, setActiveHoldKind] = useState<MoveKind | null>(null);
+  // Mirrors whipRef for UI highlighting only, same reasoning as activeHoldKind.
+  const [activeWhipKind, setActiveWhipKind] = useState<WhipKind | null>(null);
   const [playheadTime, setPlayheadTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -515,10 +611,7 @@ export function StageScene() {
   // being there) — only auto-entered sessions auto-exit when done.
   const autoEnteredCameraView = useRef(false);
   const holdRef = useRef<HoldState | null>(null);
-  const stopStyleRef = useRef<StopStyle>(stopStyle);
-  useEffect(() => {
-    stopStyleRef.current = stopStyle;
-  }, [stopStyle]);
+  const whipRef = useRef<WhipState | null>(null);
 
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -665,7 +758,7 @@ export function StageScene() {
   // engage the camera's view regardless of what's currently selected.
   const lookingThroughId = lookingThrough ? (cameraObj?.id ?? null) : null;
 
-  // Mirrored into a ref (same reasoning as stopStyleRef above) so the
+  // Mirrored into a ref so the
   // mount-once keydown/keyup listeners always see the current camera id
   // without needing to be torn down and rebuilt on every objects change.
   const cameraIdRef = useRef<number | null>(cameraObj?.id ?? null);
@@ -789,9 +882,16 @@ export function StageScene() {
     const camNode = nodes.current.get(cameraId);
     const cam = cameraFovRef.current;
     if (!camNode || !cam) return;
-    if (holdRef.current?.kind === kind && holdRef.current.phase === "hold") return;
+    if (holdRef.current?.kind === kind) return;
 
-    const state: HoldState = { kind, phase: "hold" };
+    // A hold and a whip both drive the same camera node directly — starting
+    // one while the other is mid-flight would fight over its position/FOV.
+    if (whipRef.current) {
+      whipRef.current = null;
+      setActiveWhipKind(null);
+    }
+
+    const state: HoldState = { kind };
     if (kind === "dolly-zoom-in" || kind === "dolly-zoom-out") {
       const focus = new THREE.Vector3(0, 1, 0);
       const d0 = camNode.position.distanceTo(focus);
@@ -801,17 +901,55 @@ export function StageScene() {
     setActiveHoldKind(kind);
   }
 
-  // Released on keyup/mouseup/mouseleave. "linear" stops immediately;
-  // "quad" hands off to HoldMoveAnimator's decay phase for a smoother stop.
+  // Released on keyup/mouseup/mouseleave — stops immediately, no ease-out.
   function stopHold(kind: MoveKind) {
-    if (holdRef.current?.kind !== kind || holdRef.current.phase !== "hold") return;
-    if (stopStyleRef.current === "linear") {
-      holdRef.current = null;
-      syncCameraFromLive();
-    } else {
-      holdRef.current = { ...holdRef.current, phase: "decay", decayStart: performance.now(), rateAtRelease: MOVE_RATES[kind] };
-    }
+    if (holdRef.current?.kind !== kind) return;
+    holdRef.current = null;
+    syncCameraFromLive();
     setActiveHoldKind(null);
+  }
+
+  // Fired on click, not held. Unlike a hold, a whip doesn't need a matching
+  // "stop" call — WhipMoveAnimator runs it to completion on its own timer
+  // and syncs the result back via onSettled.
+  function startWhip(kind: WhipKind) {
+    const cameraId = cameraIdRef.current;
+    if (cameraId === null) return;
+    const camNode = nodes.current.get(cameraId);
+    const cam = cameraFovRef.current;
+    if (!camNode || !cam) return;
+    if (whipRef.current) return; // let the current whip finish before starting another
+
+    if (holdRef.current) {
+      holdRef.current = null;
+      setActiveHoldKind(null);
+    }
+
+    if (kind === "whip-pan-left" || kind === "whip-pan-right") {
+      const sign = kind === "whip-pan-right" ? 1 : -1;
+      whipRef.current = {
+        kind,
+        start: performance.now(),
+        from: camNode.rotation.y,
+        to: camNode.rotation.y + sign * THREE.MathUtils.degToRad(WHIP_PAN_ANGLE_DEG),
+      };
+    } else {
+      const focus = new THREE.Vector3(0, 1, 0);
+      const dir = camNode.position.clone().sub(focus).normalize();
+      const d0 = camNode.position.distanceTo(focus);
+      const factor = kind === "whip-dolly-zoom-in" ? 1 / WHIP_DOLLY_FACTOR : WHIP_DOLLY_FACTOR;
+      const to = THREE.MathUtils.clamp(d0 * factor, MIN_DOLLY_DIST, MAX_DOLLY_DIST);
+      whipRef.current = {
+        kind,
+        start: performance.now(),
+        from: d0,
+        to,
+        k: d0 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2),
+        focus,
+        dir,
+      };
+    }
+    setActiveWhipKind(kind);
   }
 
   function togglePlay() {
@@ -913,13 +1051,19 @@ export function StageScene() {
         )}
 
         {cameraObj && (
-          <HoldMoveAnimator
-            nodesRef={nodes}
-            cameraIdRef={cameraIdRef}
-            camRef={cameraFovRef}
-            holdRef={holdRef}
-            onSettled={syncCameraFromLive}
-          />
+          <>
+            <HoldMoveAnimator nodesRef={nodes} cameraIdRef={cameraIdRef} camRef={cameraFovRef} holdRef={holdRef} />
+            <WhipMoveAnimator
+              nodesRef={nodes}
+              cameraIdRef={cameraIdRef}
+              camRef={cameraFovRef}
+              whipRef={whipRef}
+              onSettled={() => {
+                syncCameraFromLive();
+                setActiveWhipKind(null);
+              }}
+            />
+          </>
         )}
 
         <PlaybackDriver
@@ -1031,19 +1175,23 @@ export function StageScene() {
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="pl-2 pr-1 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Stop</span>
-                  {(["linear", "quad"] as const).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setStopStyle(s)}
-                      title={s === "linear" ? "Stops abruptly the instant you release" : "Eases to a stop over ~0.4s"}
-                      className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                        stopStyle === s ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
-                      }`}
-                    >
-                      {s === "linear" ? "Linear" : "Quad"}
-                    </button>
+                <div className="flex flex-col gap-1 border-t border-border pt-2">
+                  <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Whip</span>
+                  {WHIP_ROWS.map(([negKind, posKind, label]) => (
+                    <div key={label} className="flex items-center gap-1">
+                      <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                      {[negKind, posKind].map((kind) => (
+                        <button
+                          key={kind}
+                          onClick={() => startWhip(kind)}
+                          className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                            activeWhipKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                          }`}
+                        >
+                          {WHIP_SHORT_LABELS[kind]}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               </div>
