@@ -50,11 +50,24 @@ https://rystorm.com/blog/translate-gizmo-design.
   thing, and auto-restores whatever view you were on before. A
   picture-in-picture version of the camera view via drei's `<View>` portal
   (https://drei.docs.pmnd.rs/portals/view) was tried and worked, then pulled
-  back out — user wants to build that part themselves. **Future plan:** fly
-  controls (WASD + mouse-look) bound to the camera while in camera view, so
-  it can be repositioned without round-tripping through the orbit view — its
-  own gizmo is unusable there since it renders exactly at the viewer's eye
-  point.
+  back out — user wants to build that part themselves.
+- **Fly controls:** while in camera view, "Fly (F)" hands the camera a
+  free-flight rig — WASD to move along its own axes (forward follows the
+  lens, so a pitched-down camera descends), Q/E down/up on the world axis,
+  Shift to boost, and pointer-locked mouse-look; Esc (or releasing the lock
+  any other way) exits. This is what makes the camera repositionable from
+  inside its own view — its gizmo is unusable there, since it renders
+  exactly at the viewer's eye point. While flying, fly owns the keyboard
+  and the pointer: the camera-move keys are suppressed (WASDQE overlap them
+  — W/E are roll), the gizmo is hidden, and canvas clicks no longer change
+  the selection, since pointer lock means there's no visible cursor to aim.
+  Mouse-look re-decomposes the camera's rotation to `YXZ` for as long as
+  it's flying, so yaw stays on the world up axis and can't roll the horizon;
+  `reorder()` keeps the orientation itself untouched in both directions, and
+  the final transform is written back to React state on exit, the same way a
+  finished hold move is. **Future plan:** a configurable fly speed, and
+  recording a fly path straight into keyframes instead of only ending at a
+  static pose.
 - **Camera moves:** three hold-to-run moves — Dolly zoom in (I), Zoom (Z),
   Pan (P) — behind a "+ Camera moves" popover, bound to both a key and a
   press-and-hold toolbar button. Held, a move progresses at a fixed rate

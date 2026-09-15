@@ -369,6 +369,34 @@ const WHIP_DURATION_MS = 220;
 const WHIP_PAN_ANGLE_DEG = 45;
 const WHIP_DOLLY_FACTOR = 2; // whip-in halves distance to focus, whip-out doubles it
 
+// Fly controls: a free-flight rig for the camera while looking through it,
+// so it can be repositioned from inside its own view instead of orbiting
+// back out to drag its gizmo (which renders at the viewer's eye point there
+// and is unusable). WASD walks, Q/E drop/rise, Shift boosts, mouse looks.
+type FlyAxis = "forward" | "back" | "left" | "right" | "up" | "down";
+type FlyKeys = Record<FlyAxis, boolean> & { boost: boolean };
+const FLY_KEYS: Record<string, FlyAxis> = {
+  w: "forward",
+  s: "back",
+  a: "left",
+  d: "right",
+  e: "up",
+  q: "down",
+};
+const FLY_SPEED = 2.4; // metres per second
+const FLY_BOOST = 2.5; // multiplier while Shift is held
+const FLY_LOOK_SENSITIVITY = 0.0022; // radians per pixel of pointer-locked mouse movement
+const FLY_MAX_PITCH = Math.PI / 2 - 0.02; // just shy of straight up/down, so yaw never gimbals
+const EMPTY_FLY_KEYS: FlyKeys = {
+  forward: false,
+  back: false,
+  left: false,
+  right: false,
+  up: false,
+  down: false,
+  boost: false,
+};
+
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -516,6 +544,53 @@ function WhipMoveAnimator({
   return null;
 }
 
+/** Moves the camera while fly mode is on, from whichever direction keys are
+ * currently down. Same shape as HoldMoveAnimator — it mutates the live
+ * camera node every frame rather than going through React state, and reads
+ * its inputs from refs written by the keyboard handlers in StageScene.
+ * Mouse-look isn't here: pointer-lock mousemove events arrive on their own
+ * schedule (not once per frame), so they're applied straight from the
+ * listener instead of being buffered for this loop. */
+function FlyAnimator({
+  nodesRef,
+  cameraIdRef,
+  flyingRef,
+  keysRef,
+}: {
+  nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
+  cameraIdRef: React.RefObject<number | null>;
+  flyingRef: React.RefObject<boolean>;
+  keysRef: React.RefObject<FlyKeys>;
+}) {
+  // World up, reused rather than allocated per frame (see HoldMoveAnimator).
+  const upRef = useRef(new THREE.Vector3(0, 1, 0));
+
+  useFrame((_, delta) => {
+    if (!flyingRef.current) return;
+    const cameraId = cameraIdRef.current;
+    if (cameraId === null) return;
+    const camNode = nodesRef.current.get(cameraId);
+    if (!camNode) return;
+
+    const keys = keysRef.current;
+    const step = FLY_SPEED * (keys.boost ? FLY_BOOST : 1) * delta;
+
+    // translateZ/X walk along the camera's own axes, so forward follows
+    // wherever the lens points — pitched down, forward descends. This flies,
+    // it doesn't walk a ground plane.
+    if (keys.forward) camNode.translateZ(-step);
+    if (keys.back) camNode.translateZ(step);
+    if (keys.left) camNode.translateX(-step);
+    if (keys.right) camNode.translateX(step);
+    // Rise/fall stay on the world up axis instead, so Q/E are always
+    // straight down/up regardless of how far the camera is pitched over.
+    if (keys.up) camNode.position.addScaledVector(upRef.current, step);
+    if (keys.down) camNode.position.addScaledVector(upRef.current, -step);
+  });
+
+  return null;
+}
+
 /** Advances the timeline playhead while playing. A plain useFrame instead of
  * a setInterval/rAF loop of its own, and reads isPlaying/duration straight
  * from props (refreshed every render) rather than a ref, since every
@@ -612,6 +687,15 @@ export function StageScene() {
   const autoEnteredCameraView = useRef(false);
   const holdRef = useRef<HoldState | null>(null);
   const whipRef = useRef<WhipState | null>(null);
+  // Fly mode. `flyingRef` is what the per-frame loop and the mount-once
+  // keyboard/mouse listeners read; `flying` only exists so the UI can
+  // highlight the button and show the hint.
+  const [flying, setFlyingUi] = useState(false);
+  const flyingRef = useRef(false);
+  const flyKeys = useRef<FlyKeys>({ ...EMPTY_FLY_KEYS });
+  // Read by the same mount-once listeners, which must not be rebuilt on
+  // every camera-view toggle (see cameraIdRef for the same reasoning).
+  const lookingThroughRef = useRef(false);
 
   function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -692,21 +776,66 @@ export function StageScene() {
       ctrlHeld.current = e.ctrlKey;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.isContentEditable)) return;
-      if (e.key === "r" || e.key === "R") {
+      const key = e.key.toLowerCase();
+      // F only means anything from inside the camera's own view — that's the
+      // whole point of flying it.
+      if (key === "f" && lookingThroughRef.current) {
+        setFlyMode(!flyingRef.current);
+        return;
+      }
+      if (flyingRef.current) {
+        // Fly mode owns the keyboard outright: WASDQE overlap the camera-move
+        // keys (W/E are roll), so those stay suppressed until it's off.
+        flyKeys.current.boost = e.shiftKey;
+        const axis = FLY_KEYS[key];
+        if (axis) {
+          flyKeys.current[axis] = true;
+          e.preventDefault();
+        }
+        return;
+      }
+      if (key === "r") {
         setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
       }
-      const kind = MOVE_KEYS[e.key.toLowerCase()];
+      const kind = MOVE_KEYS[key];
       if (kind) startHold(kind);
     };
     const handleKeyup = (e: KeyboardEvent) => {
       ctrlHeld.current = e.ctrlKey;
-      const kind = MOVE_KEYS[e.key.toLowerCase()];
+      const key = e.key.toLowerCase();
+      if (flyingRef.current) {
+        flyKeys.current.boost = e.shiftKey;
+        const axis = FLY_KEYS[key];
+        if (axis) flyKeys.current[axis] = false;
+        return;
+      }
+      const kind = MOVE_KEYS[key];
       if (kind) stopHold(kind);
+    };
+    // Esc releases pointer lock without any keyup reaching us, so treat
+    // losing the lock as the user leaving fly mode.
+    const handlePointerLockChange = () => {
+      if (flyingRef.current && document.pointerLockElement !== canvasEl.current) setFlyMode(false);
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!flyingRef.current || document.pointerLockElement !== canvasEl.current) return;
+      const cameraId = cameraIdRef.current;
+      if (cameraId === null) return;
+      const camNode = nodes.current.get(cameraId);
+      if (!camNode) return;
+      // Pitch is clamped short of vertical; yaw is free to wrap.
+      camNode.rotation.y -= e.movementX * FLY_LOOK_SENSITIVITY;
+      camNode.rotation.x = THREE.MathUtils.clamp(
+        camNode.rotation.x - e.movementY * FLY_LOOK_SENSITIVITY,
+        -FLY_MAX_PITCH,
+        FLY_MAX_PITCH
+      );
     };
     // A held key/mouse-button whose release event never fires (alt-tabbing
     // away mid-hold) would otherwise leave the move stuck running forever.
     const handleBlur = () => {
       ctrlHeld.current = false;
+      flyKeys.current = { ...EMPTY_FLY_KEYS };
       if (holdRef.current) {
         holdRef.current = null;
         setActiveHoldKind(null);
@@ -716,10 +845,14 @@ export function StageScene() {
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("keyup", handleKeyup);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("keyup", handleKeyup);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -739,6 +872,14 @@ export function StageScene() {
     if (!lookingThrough && mediaRecorder.current?.state === "recording") {
       mediaRecorder.current.stop();
     }
+  }, [lookingThrough]);
+
+  // Flying only makes sense from inside the camera's view — leaving it (by
+  // the toolbar button, or the auto-exit after a capture) drops fly mode too.
+  useEffect(() => {
+    lookingThroughRef.current = lookingThrough;
+    if (!lookingThrough && flyingRef.current) setFlyMode(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookingThrough]);
 
   function resetLayout() {
@@ -873,6 +1014,46 @@ export function StageScene() {
     setObjects((prev) => prev.map((o) => (o.id === cameraId ? { ...o, position, rotation, fov: cam.fov } : o)));
   }
 
+  /** Enters/leaves fly mode. Entering takes sole control of the camera node
+   * (any hold/whip in flight is dropped) and grabs pointer lock so mouse
+   * movement can be read as unbounded deltas; leaving hands the camera's
+   * final transform back to React state, the same way a finished hold move
+   * does. */
+  function setFlyMode(next: boolean) {
+    const cameraId = cameraIdRef.current;
+    const camNode = cameraId === null ? null : nodes.current.get(cameraId);
+    flyKeys.current = { ...EMPTY_FLY_KEYS };
+
+    if (next) {
+      if (!camNode) return;
+      if (holdRef.current) {
+        holdRef.current = null;
+        setActiveHoldKind(null);
+      }
+      if (whipRef.current) {
+        whipRef.current = null;
+        setActiveWhipKind(null);
+      }
+      // YXZ applies yaw around the world up axis, so mouse-look can't tilt
+      // the horizon the way the default XYZ order would once pitched.
+      // reorder() re-decomposes the same orientation, so nothing visibly
+      // moves at the moment fly mode turns on.
+      camNode.rotation.reorder("YXZ");
+      flyingRef.current = true;
+      setFlyingUi(true);
+      canvasEl.current?.requestPointerLock();
+      return;
+    }
+
+    flyingRef.current = false;
+    setFlyingUi(false);
+    // Back to the order every other part of the scene (gizmo, keyframes,
+    // camera moves) reads rotation in.
+    if (camNode) camNode.rotation.reorder("XYZ");
+    if (document.pointerLockElement === canvasEl.current) document.exitPointerLock();
+    syncCameraFromLive();
+  }
+
   // Grabbed on keydown/mousedown. Ignores a repeat trigger for the move
   // already in progress (keyboard auto-repeat would otherwise re-arm a
   // dolly-zoom move's fixed `k` constant every ~30ms).
@@ -1000,7 +1181,11 @@ export function StageScene() {
         shadows
         dpr={[1, 2]}
         className="!absolute inset-0"
-        onPointerMissed={() => setSelectedId(null)}
+        // Flying pointer-locks the canvas, so stray clicks land on the scene
+        // with no visible cursor — don't let them change the selection.
+        onPointerMissed={() => {
+          if (!flyingRef.current) setSelectedId(null);
+        }}
         // Photo/video capture reads pixels back from this buffer on demand
         // (a button click, not synced to the render loop) — without this,
         // the WebGL buffer can already be cleared by the time toBlob/
@@ -1025,7 +1210,9 @@ export function StageScene() {
         <SceneContents
           objects={objects}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={(id) => {
+            if (!flyingRef.current) setSelectedId(id);
+          }}
           objRef={setObjRef}
           lookingThroughId={lookingThroughId}
           cameraRef={cameraFovRef}
@@ -1036,7 +1223,7 @@ export function StageScene() {
           jointRef={setJointRef}
         />
 
-        {selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && (
+        {selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && !flying && (
           <TransformControls
             object={selectedNode}
             mode={effectiveGizmoMode}
@@ -1046,13 +1233,14 @@ export function StageScene() {
           />
         )}
 
-        {activeJointNode && effectiveGizmoMode === "pose" && !isPlaying && (
+        {activeJointNode && effectiveGizmoMode === "pose" && !isPlaying && !flying && (
           <TransformControls object={activeJointNode} mode="rotate" space="local" onObjectChange={syncJointTransform} />
         )}
 
         {cameraObj && (
           <>
             <HoldMoveAnimator nodesRef={nodes} cameraIdRef={cameraIdRef} camRef={cameraFovRef} holdRef={holdRef} />
+            <FlyAnimator nodesRef={nodes} cameraIdRef={cameraIdRef} flyingRef={flyingRef} keysRef={flyKeys} />
             <WhipMoveAnimator
               nodesRef={nodes}
               cameraIdRef={cameraIdRef}
@@ -1084,6 +1272,14 @@ export function StageScene() {
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
+
+      {/* Fly-mode key legend. Only up while flying — the mouse is pointer-
+          locked then, so there's nothing else on screen to click anyway. */}
+      {flying && (
+        <div className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+          Fly · WASD move · Q/E down/up · Shift boost · mouse look · Esc exit
+        </div>
+      )}
 
       {/* Manipulation tools: transform mode, camera view + capture, reset */}
       <div className="absolute bottom-32 left-6 flex items-center gap-3">
@@ -1123,6 +1319,17 @@ export function StageScene() {
             >
               {lookingThrough ? "Exit camera view" : "Camera view"}
             </button>
+            {lookingThrough && (
+              <button
+                onClick={() => setFlyMode(!flying)}
+                title="WASD to move, Q/E down/up, Shift to boost, mouse to look. Esc exits."
+                className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                  flying ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                }`}
+              >
+                {flying ? "Exit fly (Esc)" : "Fly (F)"}
+              </button>
+            )}
             <button
               onClick={capturePhoto}
               className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
