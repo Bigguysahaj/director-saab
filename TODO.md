@@ -106,7 +106,8 @@ https://rystorm.com/blog/translate-gizmo-design.
   default arrangement.
 
 Deliberately simple for the prototype phase — no true curved cove backdrop
-(flat wall + floor instead), no HDRI environment.
+(flat wall + floor instead), no HDRI environment. Inspo for a future lighting/
+debug-panel pass: `docs/inspo/studio-room/` (from sweriko/ai4anim-webgpu).
 
 ## Auditorium mode (future, for fun)
 A PVR / IMAX-style viewing mode for reviewing a completed take: dim the rest
