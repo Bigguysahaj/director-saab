@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateImage, isConfigured } from "@/lib/openrouter";
 import {
-  MUSE_IMAGE_COST_PER_IMAGE,
-  MUSE_IMAGE_MODEL,
+  CHARACTER_SHEET_COST_PER_IMAGE,
+  CHARACTER_SHEET_MODEL,
   buildCharacterShotPrompt,
   getCharacterShot,
 } from "@/lib/characterSheet";
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await generateImage({
-      model: MUSE_IMAGE_MODEL,
+      model: CHARACTER_SHEET_MODEL,
       prompt: buildCharacterShotPrompt(shot),
       input_references: [{ type: "image_url", image_url: { url: body.photo } }],
     });
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       shotId: shot.id,
       image: `data:${image.media_type};base64,${image.b64_json}`,
-      cost: MUSE_IMAGE_COST_PER_IMAGE,
+      cost: CHARACTER_SHEET_COST_PER_IMAGE,
     });
   } catch (err) {
     return NextResponse.json(

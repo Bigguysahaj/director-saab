@@ -1,6 +1,7 @@
 /**
  * Prompt templates for turning one reference photo into a same-person
- * character sheet (4 body angles + 5 expressions) via Muse Image.
+ * character sheet (4 body angles + 5 expressions) via the model in
+ * CHARACTER_SHEET_MODEL below.
  *
  * Anti-drift rule: every shot is generated from the *original* reference
  * photo, never from a previously generated shot — chaining generations off
@@ -18,21 +19,23 @@ export type CharacterShot = {
   instruction: string;
 };
 
-// As of Sept 2026, Meta rejects this model with 403 "not available in your
-// region" from at least some regions (observed from an India-based dev IP;
-// untested elsewhere). Request/response shape was verified independently
-// against google/gemini-2.5-flash-image with an identical payload, so a
-// 403 here means the region, not a bug in the request. Since this route
-// runs server-side, production availability depends on where it's
-// deployed, not on any client's location — re-test after deploying before
-// assuming this model works.
-export const MUSE_IMAGE_MODEL = "meta/muse-image";
+// meta/muse-image (Meta's would-be cheapest option) 403s "not available in
+// your region" from this dev IP (India) as of Sept 2026, retested
+// 2026-09-25 with no change — it's also dropped out of OpenRouter's general
+// /models listing, though its endpoint still resolves directly. Using
+// google/gemini-3.1-flash-lite-image ("Nano Banana 2 Lite") instead: same
+// OpenRouter source, no region issues observed, and the cheapest working
+// image-gen model as of this test. Re-check pricing/region access
+// periodically — OpenRouter's catalog turns over fast.
+export const CHARACTER_SHEET_MODEL = "google/gemini-3.1-flash-lite-image";
 
-// OpenRouter's listed price as of Sept 2026. Image generation is
-// all-or-nothing billing, so this is exact per successful shot, not an
-// estimate — but re-check openrouter.ai/meta/muse-image if it's been a
-// while, since providers do reprice.
-export const MUSE_IMAGE_COST_PER_IMAGE = 0.01;
+// Real billed cost from a live test call (2026-09-25), not the nominal
+// per-token rate — image generation burns thousands of completion tokens,
+// so the listed prompt/completion prices alone understate it a lot. Image
+// generation is all-or-nothing billing, so this is close to exact per
+// successful shot, not an estimate — but re-check via a live call if it's
+// been a while, since providers do reprice.
+export const CHARACTER_SHEET_COST_PER_IMAGE = 0.034;
 
 const STUDIO_SETTING =
   "Soft, even studio lighting against a plain light-gray seamless background.";
@@ -104,7 +107,7 @@ export const CHARACTER_SHEET_SHOTS: CharacterShot[] = [
 ];
 
 export const CHARACTER_SHEET_COST =
-  CHARACTER_SHEET_SHOTS.length * MUSE_IMAGE_COST_PER_IMAGE;
+  CHARACTER_SHEET_SHOTS.length * CHARACTER_SHEET_COST_PER_IMAGE;
 
 export function getCharacterShot(id: string): CharacterShot | undefined {
   return CHARACTER_SHEET_SHOTS.find((shot) => shot.id === id);
