@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -13,6 +13,7 @@ import {
   type Vec3,
 } from "./types";
 import { deleteKeyframeNear, interpolateTransform, upsertKeyframe } from "./keyframes";
+import { FLY_BOOST, FLY_SPEED, MAX_FLY_DELTA, flyStep, hasFlyInput, lookStep, type FlyInput } from "./flyMath";
 import { Mannequin } from "./Mannequin";
 import { Timeline } from "./Timeline";
 import { CastPanel } from "./CastPanel";
@@ -305,8 +306,8 @@ const MOVE_KEYS: Record<string, MoveKind> = {
   l: "pan-left",
   t: "pan-top",
   b: "pan-bottom",
-  w: "roll-right",
-  e: "roll-left",
+  ".": "roll-right",
+  ",": "roll-left",
 };
 // Short label shown on each button — paired with the row's own move-name label.
 const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
@@ -318,8 +319,8 @@ const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
   "pan-right": "Right (P)",
   "pan-top": "Top (T)",
   "pan-bottom": "Bottom (B)",
-  "roll-left": "Left (E)",
-  "roll-right": "Right (W)",
+  "roll-left": "Left (,)",
+  "roll-right": "Right (.)",
 };
 // Row groupings for the popover: [negative-direction kind, positive-direction kind, row label].
 const MOVE_ROWS = [
@@ -511,6 +512,141 @@ function WhipMoveAnimator({
       whipRef.current = null;
       onSettled();
     }
+  });
+
+  return null;
+}
+
+/**
+ * Fly controls for the camera while looking through it: W/A/S/D move along
+ * the view (Q/E down/up, Shift for boost), and holding the right mouse button
+ * while dragging looks around. Like the move animators, it mutates the
+ * camera's live node directly every frame and only writes back to React
+ * state (`onSettled`) once the input stops, so there's no re-render per frame.
+ * Right-drag rather than left-drag so it never fights the gizmos or
+ * click-to-select. Does nothing outside camera view, and yields to a whip
+ * move that's mid-flight since both drive the same node.
+ */
+function FlyController({
+  active,
+  nodesRef,
+  cameraIdRef,
+  whipRef,
+  onSettled,
+}: {
+  active: boolean;
+  nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
+  cameraIdRef: React.RefObject<number | null>;
+  whipRef: React.RefObject<WhipState | null>;
+  onSettled: () => void;
+}) {
+  const canvas = useThree((s) => s.gl.domElement);
+  const keys = useRef(new Set<string>());
+  const input = useRef<FlyInput>({ forward: 0, right: 0, up: 0 });
+  const wasMoving = useRef(false);
+  const onSettledRef = useRef(onSettled);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  }, [onSettled]);
+
+  useEffect(() => {
+    if (!active) return;
+    const pressed = keys.current;
+    let looking = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const cameraNode = () => {
+      const id = cameraIdRef.current;
+      return id === null ? undefined : nodesRef.current.get(id);
+    };
+    const flushMoving = () => {
+      if (wasMoving.current) {
+        wasMoving.current = false;
+        onSettledRef.current();
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      pressed.add(e.code);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      pressed.delete(e.code);
+    };
+    const onBlur = () => {
+      pressed.clear();
+      if (looking) {
+        looking = false;
+        onSettledRef.current();
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 2) return;
+      looking = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!looking) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      const node = cameraNode();
+      if (node && !whipRef.current) lookStep(node.quaternion, dx, dy);
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button !== 2 || !looking) return;
+      looking = false;
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      onSettledRef.current();
+    };
+    const onContextMenu = (e: Event) => e.preventDefault();
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("contextmenu", onContextMenu);
+      pressed.clear();
+      if (looking) onSettledRef.current();
+      flushMoving();
+    };
+  }, [active, canvas, cameraIdRef, nodesRef, whipRef]);
+
+  useFrame((_, delta) => {
+    if (!active) return;
+    const pressed = keys.current;
+    const axis = (pos: string, neg: string) => (pressed.has(pos) ? 1 : 0) - (pressed.has(neg) ? 1 : 0);
+    const i = input.current;
+    i.forward = axis("KeyW", "KeyS");
+    i.right = axis("KeyD", "KeyA");
+    i.up = axis("KeyE", "KeyQ");
+
+    const moving = hasFlyInput(i);
+    const cameraId = cameraIdRef.current;
+    const node = cameraId === null ? undefined : nodesRef.current.get(cameraId);
+    if (moving && node && !whipRef.current) {
+      const boost = pressed.has("ShiftLeft") || pressed.has("ShiftRight") ? FLY_BOOST : 1;
+      // capped so a stalled frame (tab switch, GC hitch) can't lurch the camera
+      flyStep(node.position, node.quaternion, i, FLY_SPEED * boost, Math.min(delta, MAX_FLY_DELTA));
+    }
+    if (wasMoving.current && !moving) onSettledRef.current();
+    wasMoving.current = moving;
   });
 
   return null;
@@ -1063,6 +1199,13 @@ export function StageScene() {
                 setActiveWhipKind(null);
               }}
             />
+            <FlyController
+              active={lookingThrough}
+              nodesRef={nodes}
+              cameraIdRef={cameraIdRef}
+              whipRef={whipRef}
+              onSettled={syncCameraFromLive}
+            />
           </>
         )}
 
@@ -1084,6 +1227,12 @@ export function StageScene() {
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
+
+      {lookingThrough && (
+        <p className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.15em] text-fg-dim">
+          W A S D move · Q / E down / up · Shift boost · right-drag to look
+        </p>
+      )}
 
       {/* Manipulation tools: transform mode, camera view + capture, reset */}
       <div className="absolute bottom-32 left-6 flex items-center gap-3">

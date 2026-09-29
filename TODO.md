@@ -50,11 +50,20 @@ https://rystorm.com/blog/translate-gizmo-design.
   thing, and auto-restores whatever view you were on before. A
   picture-in-picture version of the camera view via drei's `<View>` portal
   (https://drei.docs.pmnd.rs/portals/view) was tried and worked, then pulled
-  back out — user wants to build that part themselves. **Future plan:** fly
-  controls (WASD + mouse-look) bound to the camera while in camera view, so
-  it can be repositioned without round-tripping through the orbit view — its
-  own gizmo is unusable there since it renders exactly at the viewer's eye
-  point.
+  back out — user wants to build that part themselves. **Fly controls**
+  (`FlyController` in `StageScene.tsx`, maths in `flyMath.ts`): while in camera
+  view, W/A/S/D fly along the view / strafe, Q/E go down/up (world vertical),
+  Shift is a 3x boost, and holding the right mouse button while dragging
+  looks around — so the camera can be repositioned without round-tripping
+  through the orbit view (its own gizmo is unusable there since it renders at
+  the viewer's eye point). Right-drag rather than left so it never fights
+  gizmos or click-to-select; yaw is about world-up, pitch is clamped to
+  ±85°, existing roll is preserved. Clamped to the room, per-frame delta
+  capped at 0.1s, ignored while typing in an input or during a whip move, and
+  the result is written back to the layout (and so persisted) when input
+  stops. Roll keys moved from W/E to `,` / `.` to free the fly keys. Tests:
+  `npm test` (pure maths, no deps) and `npm run test:e2e` (Playwright against
+  a running dev server, reads the camera back out of the autosaved layout).
 - **Camera moves:** three hold-to-run moves — Dolly zoom in (I), Zoom (Z),
   Pan (P) — behind a "+ Camera moves" popover, bound to both a key and a
   press-and-hold toolbar button. Held, a move progresses at a fixed rate
