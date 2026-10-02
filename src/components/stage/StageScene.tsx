@@ -14,6 +14,7 @@ import {
 } from "./types";
 import { deleteKeyframeNear, interpolateTransform, upsertKeyframe } from "./keyframes";
 import { FLY_BOOST, FLY_SPEED, MAX_FLY_DELTA, flyStep, hasFlyInput, lookStep, type FlyInput } from "./flyMath";
+import { PosePanel, JOINT_LABELS } from "./PosePanel";
 import { Mannequin } from "./Mannequin";
 import { Timeline } from "./Timeline";
 import { CastPanel } from "./CastPanel";
@@ -28,13 +29,6 @@ const DEFAULT_FOV = 50;
 // `keyframes`; v3 adds `castId` — all optional, but old saves are dropped
 // anyway per convention.
 const STORAGE_KEY = "director-stage-layout-v3";
-
-const JOINT_LABELS: Record<JointKey, string> = {
-  leftArm: "Left arm",
-  rightArm: "Right arm",
-  leftLeg: "Left leg",
-  rightLeg: "Right leg",
-};
 
 // Static layout to start from. Y on the box/ball props is each shape's own
 // half-height/radius so it sits flush on the floor.
@@ -722,7 +716,7 @@ export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate" | "pose">("translate");
-  const [activeJoint, setActiveJoint] = useState<JointKey | null>(null);
+  const [activeJoint, setActiveJoint] = useState<JointKey | null>("leftArm");
   const [newSize, setNewSize] = useState(0.8);
   const [newLength, setNewLength] = useState(0.8);
   const [newBreadth, setNewBreadth] = useState(0.8);
@@ -811,7 +805,7 @@ export function StageScene() {
 
   // Keyed `${mannequinId}:${joint}` — a mannequin's own root node lives in
   // `nodes` above via the same objRef path every other object uses; this map
-  // is only for the four limb-pivot nodes nested inside it.
+  // contains the articulated joint nodes nested inside it.
   const jointNodes = useRef(new Map<string, THREE.Object3D>());
   const setJointRef = (mannequinId: number, joint: JointKey, obj: THREE.Object3D | null) => {
     const key = `${mannequinId}:${joint}`;
@@ -827,7 +821,7 @@ export function StageScene() {
     const handleKeydown = (e: KeyboardEvent) => {
       ctrlHeld.current = e.ctrlKey;
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.isContentEditable)) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (e.key === "r" || e.key === "R") {
         setGizmoMode((m) => (m === "translate" ? "rotate" : "translate"));
       }
@@ -953,6 +947,7 @@ export function StageScene() {
     // and its rest pose defaults inside the Mannequin component
     setObjects((prev) => [...prev, base]);
     setSelectedId(id);
+    setInventoryOpen(false);
     setGizmoMode("translate");
   }
 
@@ -1251,8 +1246,8 @@ export function StageScene() {
           ))}
           {selected?.kind === "mannequin" && (
             <button
-              onClick={() => setGizmoMode("pose")}
-              title="Drag a joint handle to pose that limb"
+              onClick={() => { setIsPlaying(false); setGizmoMode("pose"); }}
+              title="Select body parts, adjust joints, or apply a preset pose"
               className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
                 effectiveGizmoMode === "pose" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
               }`}
@@ -1442,6 +1437,11 @@ export function StageScene() {
 
       {selected && selectedDisplay && (
         <div className="absolute bottom-20 right-6 flex flex-col items-end gap-1">
+      {selected?.kind === "mannequin" && effectiveGizmoMode === "pose" && !isPlaying && (
+        <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selected.pose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
+          onChange={(pose) => setObjects((prev) => prev.map((o) => o.id === selectedId ? { ...o, pose } : o))} />
+      )}
+
           {canDuplicate && (
             <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
           )}

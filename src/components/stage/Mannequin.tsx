@@ -28,19 +28,21 @@ type JointPivotProps = {
  * group whose own transform is what actually gets manipulated. */
 function JointPivot({ joint, position, rotation, poseMode, active, onSelectJoint, jointRef, children }: JointPivotProps) {
   return (
-    <group ref={(g) => jointRef(joint, g)} position={position} rotation={rotation}>
+    <group ref={(g) => jointRef(joint, g)} position={position} rotation={rotation}
+      onClick={(e) => { if (poseMode) { e.stopPropagation(); onSelectJoint(joint); } }}>
+
       {poseMode && (
-        <mesh
+        <mesh renderOrder={10}
           onClick={(e: ThreeEvent<MouseEvent>) => {
             e.stopPropagation();
             onSelectJoint(joint);
           }}
         >
-          <sphereGeometry args={[0.06, 16, 16]} />
-          <meshStandardMaterial
-            color={JOINT_HANDLE_COLOR}
-            emissive={active ? JOINT_HANDLE_COLOR : "#000000"}
-            emissiveIntensity={active ? 0.6 : 0}
+          <sphereGeometry args={[active ? 0.075 : 0.055, 16, 16]} />
+          <meshBasicMaterial
+            depthTest={false}
+            depthWrite={false}
+            color={active ? "#ffffff" : JOINT_HANDLE_COLOR}
           />
         </mesh>
       )}
@@ -49,14 +51,6 @@ function JointPivot({ joint, position, rotation, poseMode, active, onSelectJoint
   );
 }
 
-/**
- * A stand-in figure for blocking out where a person goes — built from
- * primitives (head/torso/arms/legs). The whole figure moves/rotates as one
- * selectable unit via the root group below; each limb additionally hangs
- * from its own joint pivot (shoulder/hip) so it can be posed independently
- * in "Pose" gizmo mode. Forward-kinematics only, one joint per limb — no
- * elbow/knee/neck, no IK.
- */
 export function Mannequin({
   id,
   position,
@@ -90,87 +84,51 @@ export function Mannequin({
     />
   );
 
+  function pivot(joint: JointKey, position: Vec3, children: React.ReactNode) {
+    return <JointPivot key={joint} joint={joint} position={position} rotation={resolvedPose[joint]}
+      poseMode={poseMode} active={activeJoint === joint} onSelectJoint={onSelectJoint} jointRef={jointRef}>
+      {children}
+    </JointPivot>;
+  }
+  function segment(length: number, radius: number) {
+    return <mesh position={[0, -length / 2, 0]} castShadow>
+      <capsuleGeometry args={[radius, length - radius * 2, 6, 12]} />{limbMaterial}
+    </mesh>;
+  }
+  function arm(side: "left" | "right", x: number) {
+    return pivot(`${side}Arm`, [x, 0.53, 0], <>
+      {segment(0.29, 0.06)}
+      {pivot(`${side}Elbow`, [0, -0.29, 0], <>
+        {segment(0.26, 0.05)}
+        {pivot(`${side}Hand`, [0, -0.26, 0], <mesh position={[0, -0.065, 0]} castShadow>
+          <boxGeometry args={[0.085, 0.13, 0.055]} />{limbMaterial}
+        </mesh>)}
+      </>)}
+    </>);
+  }
+  function leg(side: "left" | "right", x: number) {
+    return pivot(`${side}Leg`, [x, 0.86, 0], <>
+      {segment(0.4, 0.08)}
+      {pivot(`${side}Knee`, [0, -0.4, 0], <>
+        {segment(0.38, 0.065)}
+        {pivot(`${side}Foot`, [0, -0.38, 0], <mesh position={[0, -0.035, 0.06]} castShadow>
+          <boxGeometry args={[0.13, 0.09, 0.25]} />{limbMaterial}
+        </mesh>)}
+      </>)}
+    </>);
+  }
   return (
-    <group
-      ref={(g) => objRef(id, g)}
-      position={position}
-      rotation={rotation}
-      onClick={(e: ThreeEvent<MouseEvent>) => {
-        e.stopPropagation();
-        onSelect(id);
-      }}
-    >
-      {/* hips — legs hang from y=0.8 down to the floor */}
-      <JointPivot
-        joint="leftLeg"
-        position={[-0.12, 0.8, 0]}
-        rotation={resolvedPose.leftLeg}
-        poseMode={poseMode}
-        active={activeJoint === "leftLeg"}
-        onSelectJoint={onSelectJoint}
-        jointRef={jointRef}
-      >
-        <mesh position={[0, -0.4, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.08, 0.8, 12]} />
-          {limbMaterial}
-        </mesh>
-      </JointPivot>
-      <JointPivot
-        joint="rightLeg"
-        position={[0.12, 0.8, 0]}
-        rotation={resolvedPose.rightLeg}
-        poseMode={poseMode}
-        active={activeJoint === "rightLeg"}
-        onSelectJoint={onSelectJoint}
-        jointRef={jointRef}
-      >
-        <mesh position={[0, -0.4, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.08, 0.8, 12]} />
-          {limbMaterial}
-        </mesh>
-      </JointPivot>
-
-      {/* torso — spans the same 0.8-to-1.4 range the shoulder/hip pivots sit at */}
-      <mesh position={[0, 1.1, 0]} castShadow>
-        <boxGeometry args={[0.4, 0.6, 0.25]} />
-        {limbMaterial}
-      </mesh>
-
-      {/* shoulders — arms hang from y=1.4 down alongside the torso */}
-      <JointPivot
-        joint="leftArm"
-        position={[-0.3, 1.4, 0]}
-        rotation={resolvedPose.leftArm}
-        poseMode={poseMode}
-        active={activeJoint === "leftArm"}
-        onSelectJoint={onSelectJoint}
-        jointRef={jointRef}
-      >
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.06, 0.06, 0.6, 12]} />
-          {limbMaterial}
-        </mesh>
-      </JointPivot>
-      <JointPivot
-        joint="rightArm"
-        position={[0.3, 1.4, 0]}
-        rotation={resolvedPose.rightArm}
-        poseMode={poseMode}
-        active={activeJoint === "rightArm"}
-        onSelectJoint={onSelectJoint}
-        jointRef={jointRef}
-      >
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.06, 0.06, 0.6, 12]} />
-          {limbMaterial}
-        </mesh>
-      </JointPivot>
-
-      {/* head */}
-      <mesh position={[0, 1.55, 0]} castShadow>
-        <sphereGeometry args={[0.15, 24, 24]} />
-        {limbMaterial}
-      </mesh>
+    <group ref={(g) => objRef(id, g)} position={position} rotation={rotation}
+      onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onSelect(id); }}>
+      {leg("left", -0.12)}{leg("right", 0.12)}
+      {pivot("spine", [0, 0.86, 0], <>
+        <mesh position={[0, 0.26, 0]} castShadow><boxGeometry args={[0.4, 0.52, 0.25]} />{limbMaterial}</mesh>
+        {arm("left", -0.27)}{arm("right", 0.27)}
+        {pivot("head", [0, 0.58, 0], <>
+          <mesh position={[0, 0.12, 0]} castShadow><sphereGeometry args={[0.15, 24, 24]} />{limbMaterial}</mesh>
+          <mesh position={[0, 0.12, 0.145]}><boxGeometry args={[0.045, 0.045, 0.045]} />{limbMaterial}</mesh>
+        </>)}
+      </>)}
     </group>
   );
 }
