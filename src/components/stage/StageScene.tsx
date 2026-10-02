@@ -18,10 +18,11 @@ import { PosePanel, JOINT_LABELS } from "./PosePanel";
 import { Mannequin } from "./Mannequin";
 import { Timeline } from "./Timeline";
 import { CastPanel } from "./CastPanel";
+import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
 
 const BACKDROP_COLOR = "#e8e2d6";
 const PROP_COLOR = "#2a2a28";
-const PALETTE = ["#c65d3b", "#3b6b5c", "#c9a13b", "#4a5a7a", "#a3432f"];
+const PALETTE = STAGE_PALETTE.map((c) => c.hex);
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
 const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
@@ -263,7 +264,7 @@ function SceneContents({
               {...common}
               position={displayPosition}
               rotation={displayRotation}
-              color={o.color ?? "#c9b8a0"}
+              color={o.color ?? DEFAULT_MANNEQUIN_COLOR}
               pose={o.pose}
               poseMode={o.id === poseModeId}
               activeJoint={o.id === poseModeId ? activeJoint : null}
@@ -946,8 +947,8 @@ export function StageScene() {
     // mannequin stands at y=0 — its own geometry is already floor-relative,
     // and its rest pose defaults inside the Mannequin component
     setObjects((prev) => [...prev, base]);
-    setSelectedId(id);
     setInventoryOpen(false);
+    setSelectedId(id);
     setGizmoMode("translate");
   }
 
@@ -1410,6 +1411,7 @@ export function StageScene() {
           onToggle={() => setCastOpen((v) => !v)}
           canAssign={selected?.kind === "mannequin"}
           assignedId={selected?.kind === "mannequin" ? (selected.castId ?? null) : null}
+          mannequinColor={selected?.kind === "mannequin" ? (selected.color ?? DEFAULT_MANNEQUIN_COLOR) : DEFAULT_MANNEQUIN_COLOR}
           onAssign={(castId) => {
             if (!selected || selected.kind !== "mannequin") return;
             setObjects((prev) => prev.map((o) => (o.id === selected.id ? { ...o, castId: castId ?? undefined } : o)));
@@ -1435,13 +1437,13 @@ export function StageScene() {
         />
       )}
 
-      {selected && selectedDisplay && (
-        <div className="absolute bottom-20 right-6 flex flex-col items-end gap-1">
       {selected?.kind === "mannequin" && effectiveGizmoMode === "pose" && !isPlaying && (
         <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selected.pose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
           onChange={(pose) => setObjects((prev) => prev.map((o) => o.id === selectedId ? { ...o, pose } : o))} />
       )}
 
+      {selected && selectedDisplay && (
+        <div className="absolute bottom-20 right-6 flex flex-col items-end gap-1">
           {canDuplicate && (
             <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
           )}

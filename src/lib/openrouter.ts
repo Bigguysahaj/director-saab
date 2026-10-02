@@ -42,6 +42,14 @@ export async function fetchVideoModelsRaw(): Promise<unknown> {
   return unwrap(res, "list models");
 }
 
+export async function fetchImageModelsRaw(): Promise<unknown> {
+  const res = await fetch(`${BASE_URL}/images/models`, {
+    headers: headers(),
+    next: { revalidate: 300 },
+  });
+  return unwrap(res, "list image models");
+}
+
 export async function createVideoJob(
   body: GenerateRequest
 ): Promise<CreateJobResponse> {

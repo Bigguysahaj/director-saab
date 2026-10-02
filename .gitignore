@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# cast roster + generated character-sheet images (local disk, not committed)
+/.data/
+
 # editors
 .vscode/
 .idea/

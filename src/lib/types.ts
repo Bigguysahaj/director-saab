@@ -67,6 +67,18 @@ export type ImageGenerateRequest = {
 
 export type ImageGenerateResponse = {
   data: { b64_json: string; media_type: string }[];
+  usage?: { cost?: number };
+};
+
+// One entry from OpenRouter's GET /images/models catalog — the "DoP"
+// (Director of Photography) picker in Audition.tsx's Screen Test section
+// lets the user choose among these instead of a single hardcoded model.
+export type ImageModel = {
+  id: string;
+  label: string;
+  provider: string;
+  tagline: string;
+  maxInputReferences: number;
 };
 
 export type Take = {

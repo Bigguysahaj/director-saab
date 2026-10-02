@@ -2,35 +2,45 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadCast, type CastMember } from "@/lib/cast";
+import { loadCast, updateMember, type CastMember } from "@/lib/cast";
 
 /**
  * "+ Cast" popover on Stage: pick from the roster built at /audition to
- * assign a likeness to the selected mannequin (metadata only for now — see
- * TODO.md). Read-only here — creating and generating cast members happens
- * on /audition; this just lists whatever's in localStorage.
+ * assign a likeness to the selected mannequin. Assigning also copies the
+ * mannequin's color-code onto the cast member's `stageColor` (cleared on
+ * unassign) — that's what the /audition Screen Test section reads to know
+ * which cast member goes in which mannequin's spot. Otherwise read-only
+ * here: creating and generating cast members happens on /audition; this
+ * just lists whatever's on disk (see src/lib/cast.ts).
  */
 export function CastPanel({
   open,
   onToggle,
   canAssign,
   assignedId,
+  mannequinColor,
   onAssign,
 }: {
   open: boolean;
   onToggle: () => void;
   canAssign: boolean;
   assignedId: string | null;
+  mannequinColor: string;
   onAssign: (id: string | null) => void;
 }) {
   const [cast, setCast] = useState<CastMember[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    // Reads localStorage, so — same reasoning as Audition.tsx's own load —
-    // this has to be an effect, not a lazy initializer or a render-time read.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCast(loadCast());
+    // Reads IndexedDB, so — same reasoning as Audition.tsx's own load — this
+    // has to be an effect, not a lazy initializer or a render-time read.
+    let cancelled = false;
+    loadCast().then((loaded) => {
+      if (!cancelled) setCast(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   return (
@@ -54,7 +64,15 @@ export function CastPanel({
                   <button
                     key={member.id}
                     disabled={!canAssign}
-                    onClick={() => onAssign(isAssigned ? null : member.id)}
+                    onClick={() => {
+                      const nextId = isAssigned ? null : member.id;
+                      onAssign(nextId);
+                      // Best-effort — a failed write here just means the
+                      // Screen Test section won't see this assignment until
+                      // it's retried; the stage assignment itself (above)
+                      // already succeeded regardless.
+                      updateMember(member.id, { stageColor: nextId ? mannequinColor : null }).catch(() => {});
+                    }}
                     className={`flex items-center gap-2 rounded-full border px-2 py-1.5 text-left transition-colors disabled:opacity-40 ${
                       isAssigned ? "border-accent bg-accent-soft" : "border-border hover:border-accent"
                     }`}

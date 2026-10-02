@@ -3,35 +3,47 @@ export type CastMemberShot = { image: string; cost: number };
 export type CastMember = {
   id: string;
   name: string;
-  photo: string; // reference photo, data URL
+  photo: string; // URL served from /api/cast/[id]/file/[filename], "" if none
   shots: Record<string, CastMemberShot>; // shotId -> generated result
+  stageColor: string | null; // hex of the mannequin this member is currently assigned to on /stage, if any (see CastPanel.tsx)
 };
 
-const KEY = "director.cast.v1";
+/**
+ * Cast roster lives on disk (see src/lib/castStore.ts), served through
+ * /api/cast — not in the browser at all, so reference photos and generated
+ * shots don't bloat localStorage/IndexedDB and are easy to inspect/back up
+ * directly as files.
+ */
 
-export function loadCast(): CastMember[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as CastMember[]) : [];
-  } catch {
-    return [];
-  }
+export async function loadCast(): Promise<CastMember[]> {
+  const res = await fetch("/api/cast");
+  if (!res.ok) return [];
+  return res.json();
 }
 
-export function saveCast(cast: CastMember[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, JSON.stringify(cast));
+export async function createMember(name: string): Promise<CastMember> {
+  const res = await fetch("/api/cast", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error("Failed to create cast member");
+  return res.json();
 }
 
-export function upsertCastMember(cast: CastMember[], member: CastMember): CastMember[] {
-  const idx = cast.findIndex((c) => c.id === member.id);
-  if (idx === -1) return [...cast, member];
-  const next = [...cast];
-  next[idx] = member;
-  return next;
+export async function updateMember(
+  id: string,
+  patch: { name?: string; photo?: string; shots?: Record<string, CastMemberShot>; stageColor?: string | null }
+): Promise<CastMember> {
+  const res = await fetch(`/api/cast/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("Failed to update cast member");
+  return res.json();
 }
 
-export function removeCastMember(cast: CastMember[], id: string): CastMember[] {
-  return cast.filter((c) => c.id !== id);
+export async function deleteMember(id: string): Promise<void> {
+  await fetch(`/api/cast/${id}`, { method: "DELETE" });
 }
