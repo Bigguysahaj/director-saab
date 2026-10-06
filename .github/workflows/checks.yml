@@ -41,8 +41,9 @@ jobs:
         with:
           path: evals/.models
           key: eval-models-${{ hashFiles('evals/models.json') }}
-      # opencv-contrib-python (pulled in by mediapipe) links against libGL.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgl1
+      # opencv-contrib-python (pulled in by mediapipe) links against libGL;
+      # MediaPipe's tasks runtime loads libEGL/libGLESv2 even on CPU.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgl1 libegl1 libgles2
       - run: pip install -r evals/requirements.txt
       - run: npm run eval
       - uses: actions/upload-artifact@v4
