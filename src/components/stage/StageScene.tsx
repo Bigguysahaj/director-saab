@@ -974,7 +974,9 @@ export function StageScene() {
   }
 
   async function capturePhoto() {
-    if (!cameraObj) return;
+    // No canvas until the renderer is created (onCreated) — bail before
+    // switching views, or an early click strands you in camera view.
+    if (!cameraObj || !canvasEl.current) return;
     const wasLookingThrough = lookingThrough;
     if (!wasLookingThrough) {
       setLookingThrough(true);
@@ -1034,7 +1036,8 @@ export function StageScene() {
       mediaRecorder.current?.stop();
       return;
     }
-    if (!cameraObj) return;
+    // Same early-click guard as capturePhoto.
+    if (!cameraObj || !canvasEl.current) return;
     const wasLookingThrough = lookingThrough;
     if (!wasLookingThrough) {
       setLookingThrough(true);

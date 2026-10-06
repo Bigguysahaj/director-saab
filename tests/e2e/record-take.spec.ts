@@ -7,11 +7,12 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/stage");
-  await expect(page.locator("canvas")).toBeVisible();
+  // The server-rendered <canvas> shows up before the renderer exists; three.js
+  // stamps data-engine on it once created, which is when recording can work.
+  await expect(page.locator("canvas[data-engine]")).toBeVisible({ timeout: 30_000 });
   const stop = page.getByRole("button", { name: "● Stop recording", exact: true });
-  // Recording starts only after camera view has rendered a few frames; the
-  // first camera-view render compiles shaders, which under CI's software
-  // WebGL can block the main thread for several seconds.
+  // Recording starts after camera view renders a few frames; slow under
+  // CI's software WebGL.
   const STARTS = { timeout: 30_000 };
 
   await page.getByRole("button", { name: "Record take", exact: true }).click();
