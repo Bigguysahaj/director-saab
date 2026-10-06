@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { KEYFRAME_EPSILON, type Keyframe, type Vec3 } from "./types";
+import { resolvePose } from "../../lib/poses/model";
+import { KEYFRAME_EPSILON, type Keyframe, type MannequinPose, type Vec3 } from "./types";
 
 function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [
@@ -38,12 +39,47 @@ export function interpolateTransform(
   return { position: last.position, rotation: last.rotation };
 }
 
+/**
+ * Same linear hold-at-the-ends interpolation as interpolateTransform, per
+ * joint and per axis, over only the keyframes that carry a pose — a
+ * position-only key in between must not snap the figure to DEFAULT_POSE.
+ * Poses resolve against DEFAULT_POSE first (stored data can predate a
+ * joint) so every joint has both ends to lerp between. Returns null when no
+ * keyframe has a pose, so the figure's static `pose` applies (old layouts,
+ * unkeyed figures).
+ */
+export function interpolatePose(keyframes: Keyframe[] | undefined, t: number): MannequinPose | null {
+  const posed = (keyframes ?? []).filter((k) => k.pose).sort((a, b) => a.time - b.time);
+  if (posed.length === 0) return null;
+  if (t <= posed[0].time) return resolvePose(posed[0].pose);
+  const last = posed[posed.length - 1];
+  if (t >= last.time) return resolvePose(last.pose);
+
+  let i = 0;
+  while (t > posed[i + 1].time) i++;
+  const a = posed[i];
+  const b = posed[i + 1];
+  const span = b.time - a.time;
+  const localT = span === 0 ? 0 : (t - a.time) / span;
+  const from = resolvePose(a.pose);
+  const to = resolvePose(b.pose);
+  for (const joint of Object.keys(from) as (keyof MannequinPose)[]) from[joint] = lerpVec3(from[joint], to[joint], localT);
+  return from;
+}
+
 /** Inserts a keyframe at `time` (snapped to 0.1s), overwriting one already
  * within KEYFRAME_EPSILON rather than creating a duplicate stop. */
-export function upsertKeyframe(keyframes: Keyframe[] | undefined, time: number, position: Vec3, rotation: Vec3): Keyframe[] {
+export function upsertKeyframe(
+  keyframes: Keyframe[] | undefined,
+  time: number,
+  position: Vec3,
+  rotation: Vec3,
+  pose?: MannequinPose
+): Keyframe[] {
   const snapped = Math.round(time * 10) / 10;
   const next = (keyframes ?? []).filter((k) => Math.abs(k.time - snapped) >= KEYFRAME_EPSILON);
-  next.push({ time: snapped, position, rotation });
+  // Only set the key when given, so props/cameras keep their pose-less shape.
+  next.push(pose ? { time: snapped, position, rotation, pose } : { time: snapped, position, rotation });
   return next.sort((a, b) => a.time - b.time);
 }
 

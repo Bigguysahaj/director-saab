@@ -1,4 +1,5 @@
-import { TIMELINE_DURATION, type SceneObject, type Vec3 } from "./types";
+import { JOINTS, resolvePose } from "../../lib/poses/model";
+import { TIMELINE_DURATION, type MannequinPose, type SceneObject, type Vec3 } from "./types";
 
 export const SCENE_SCHEMA = "director-stage-scene/v1";
 const SCENE_KINDS: SceneObject["kind"][] = ["box", "ball", "purse", "light", "camera", "mannequin"];
@@ -21,8 +22,19 @@ export function parseScene(data: unknown): SceneObject[] {
       if (typeof k?.time !== "number" || k.time < 0 || k.time > TIMELINE_DURATION || !isVec3(k.position) || !isVec3(k.rotation)) {
         throw new Error(`${where}: bad keyframe (time 0-${TIMELINE_DURATION}s, position/rotation [x, y, z])`);
       }
+      if (k.pose !== undefined) {
+        if (!k.pose || typeof k.pose !== "object" || Array.isArray(k.pose)) throw new Error(`${where}: keyframe pose must map joint names to [x, y, z]`);
+        for (const [joint, value] of Object.entries(k.pose)) {
+          if (!JOINTS.includes(joint as (typeof JOINTS)[number])) throw new Error(`${where}: keyframe pose has unknown joint "${joint}"`);
+          if (!isVec3(value)) throw new Error(`${where}: keyframe pose joint "${joint}" must be [x, y, z]`);
+        }
+      }
     }
   });
   if (objects.filter((o) => o.kind === "camera").length > 1) throw new Error("only one camera is supported");
-  return objects as SceneObject[];
+  // Scene files may key only the joints that move; fill the rest from
+  // DEFAULT_POSE so every keyframe pose is a whole MannequinPose in memory.
+  return objects.map((o) =>
+    o.keyframes ? { ...o, keyframes: o.keyframes.map((k: { pose?: Partial<MannequinPose> }) => (k.pose ? { ...k, pose: resolvePose(k.pose) } : k)) } : o
+  ) as SceneObject[];
 }

@@ -7,6 +7,7 @@ export type Keyframe = {
   time: number;
   position: Vec3;
   rotation: Vec3;
+  pose?: MannequinPose; // mannequin only; keyframes without one don't affect the pose track
 };
 
 export type SceneObject = {
@@ -19,7 +20,7 @@ export type SceneObject = {
   length?: number; // box/purse X dimension — defaults to `size` (a cube) when unset
   breadth?: number; // box/purse Z dimension — defaults to `size` (a cube) when unset
   fov?: number; // camera only
-  pose?: MannequinPose; // mannequin only — static rig pose, not keyframed
+  pose?: MannequinPose; // mannequin only — static rig pose, used while no keyframe carries a pose
   keyframes?: Keyframe[]; // box/ball/purse/mannequin only, sorted by time
   castId?: string; // mannequin only — id into the /audition roster (src/lib/cast.ts), metadata only for now
 };
