@@ -89,13 +89,16 @@ https://rystorm.com/blog/translate-gizmo-design.
   bottom-docked under the toolbar, shown only while a keyframeable object is
   selected (`selected && canKeyframeSelection`) — Play with nothing selected
   had nothing to play back, so it stayed hidden until then. A selected
-  box/ball/mannequin's position/rotation can be recorded at the current
+  box/ball/purse/mannequin/camera's position/rotation can be recorded at the current
   playhead time via "+ Key" (and removed via "− Key"); between two
   keyframes it linearly interpolates, so scenes can have simple blocked-out
   motion instead of being fully static. Root transform only — a
   mannequin's joint poses (above) stay a static/manual-only control, not
-  part of a keyframe. Camera/light aren't keyframable (the camera has its
-  own move presets above). **Future plan:** loop/ping-pong playback, more
+  part of a keyframe. Lights aren't keyframable. A keyframed camera gives a
+  moving shot; "Record take" plays the timeline from 0 while recording and
+  stops at the end. Whole scenes export/import as JSON ("Export scene" /
+  "Import scene", `director-stage-scene/v1`, validated in `scene.ts`;
+  example: `docs/scenes/purse-hook.json`). **Future plan:** loop/ping-pong playback, more
   than one clip, eased (not just linear) interpolation, keyframing joint
   poses too.
 - **Cast:** roster built on `/audition` — upload one reference photo per

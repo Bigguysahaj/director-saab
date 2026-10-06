@@ -1015,6 +1015,9 @@ export function StageScene() {
     setIsPlaying(false);
     setPlayheadTime(0);
     await toggleRecording();
+    // toggleRecording can bail before starting (no canvas yet) — only arm
+    // the take if a recorder is actually running.
+    if (mediaRecorder.current?.state !== "recording") return;
     recordingTake.current = true;
     setIsPlaying(true);
   }
@@ -1049,6 +1052,9 @@ export function StageScene() {
       if (e.data.size > 0) recordedChunks.current.push(e.data);
     };
     recorder.onstop = () => {
+      // Every stop path (button, take end, pause) lands here, so a take cut
+      // short can't leave the flag set and kill the next manual recording.
+      recordingTake.current = false;
       downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.webm`);
       setIsRecording(false);
       if (autoEnteredCameraView.current) setLookingThrough(false);
