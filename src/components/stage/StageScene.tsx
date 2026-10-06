@@ -69,6 +69,9 @@ function ImageBackdropWall({ url }: { url: string }) {
 const PROP_COLOR = "#2a2a28";
 const PALETTE = STAGE_PALETTE.map((c) => c.hex);
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
+// Handbag scale next to the ~1.75-unit mannequin.
+const PURSE_SIZE = { height: 0.3, length: 0.45, breadth: 0.2 };
+const PURSE_WALL = 0.012;
 const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
 // are ignored instead of crashing on load. v2 adds mannequin `pose` and
@@ -163,6 +166,62 @@ function ShapeProp({ id, shape, position, rotation, color, size, length, breadth
 }
 
 /**
+ * Open-top hollow bag (floor + four walls + a strap), for shots from inside
+ * it looking up — a solid box would back-face cull and the camera would see
+ * straight through it. Walls are double-sided so the interior reads from
+ * inside. The group origin is the bag's floor center, so it sits at y=0.
+ */
+function Purse({ id, position, rotation, color, height, length, breadth, selected, onSelect, objRef }: ItemProps & {
+  position: Vec3;
+  rotation: Vec3;
+  color: string;
+  height: number;
+  length: number;
+  breadth: number;
+}) {
+  const t = PURSE_WALL;
+  const panels: { pos: Vec3; dims: Vec3 }[] = [
+    { pos: [0, t / 2, 0], dims: [length, t, breadth] },
+    { pos: [0, height / 2, breadth / 2 - t / 2], dims: [length, height, t] },
+    { pos: [0, height / 2, -breadth / 2 + t / 2], dims: [length, height, t] },
+    { pos: [length / 2 - t / 2, height / 2, 0], dims: [t, height, breadth] },
+    { pos: [-length / 2 + t / 2, height / 2, 0], dims: [t, height, breadth] },
+  ];
+  const material = (
+    <meshStandardMaterial
+      color={color}
+      roughness={0.6}
+      side={THREE.DoubleSide}
+      emissive={selected ? "#ffffff" : "#000000"}
+      emissiveIntensity={selected ? 0.15 : 0}
+    />
+  );
+  return (
+    <group
+      ref={(g) => objRef(id, g)}
+      position={position}
+      rotation={rotation}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        onSelect(id);
+      }}
+    >
+      {panels.map(({ pos, dims }, i) => (
+        <mesh key={i} position={pos} castShadow receiveShadow>
+          <boxGeometry args={dims} />
+          {material}
+        </mesh>
+      ))}
+      {/* strap: half-torus arching over the opening along X */}
+      <mesh position={[0, height, 0]} castShadow>
+        <torusGeometry args={[length * 0.32, 0.012, 8, 24, Math.PI]} />
+        {material}
+      </mesh>
+    </group>
+  );
+}
+
+/**
  * A softbox-on-a-stand light. The spotlight's target is a plain Object3D
  * nested in the same group (not a fixed world coordinate) so the beam turns
  * with the stand instead of always pointing at a hardcoded spot — that's
@@ -252,7 +311,8 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
         </mesh>
       </group>
       {/* PerspectiveCamera looks down local -Z by default, same direction the lens cone points */}
-      <PerspectiveCamera ref={camRef} makeDefault={lookingThrough} fov={fov} />
+      {/* near=0.01 so the camera can sit inside a purse without clipping its walls */}
+      <PerspectiveCamera ref={camRef} makeDefault={lookingThrough} fov={fov} near={0.01} />
     </group>
   );
 }
@@ -334,6 +394,20 @@ function SceneContents({
               size={o.size ?? DEFAULT_SIZE[o.kind]}
               length={o.length}
               breadth={o.breadth}
+            />
+          );
+        }
+        if (o.kind === "purse") {
+          return (
+            <Purse
+              key={o.id}
+              {...common}
+              position={displayPosition}
+              rotation={displayRotation}
+              color={o.color ?? PALETTE[0]}
+              height={o.size ?? PURSE_SIZE.height}
+              length={o.length ?? PURSE_SIZE.length}
+              breadth={o.breadth ?? PURSE_SIZE.breadth}
             />
           );
         }
@@ -808,6 +882,7 @@ export function StageScene() {
   const [isRecording, setIsRecording] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
+  const [orbitCamera, setOrbitCamera] = useState<THREE.PerspectiveCamera | null>(null);
   const [backdrop, setBackdrop] = useState<Backdrop>({ kind: "plain" });
   // Session-only: the object URL dies with the tab, so the image isn't persisted.
   useEffect(() => {
@@ -1008,8 +1083,9 @@ export function StageScene() {
   }, [cameraObj?.id]);
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
-  const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
-  const canKeyframeSelection = selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "mannequin";
+  const canDuplicate = selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "purse";
+  const canKeyframeSelection =
+    selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "purse" || selected?.kind === "mannequin";
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -1036,7 +1112,7 @@ export function StageScene() {
     );
   }, [selectedId, effectiveActiveJoint]);
 
-  function addFromInventory(kind: "box" | "ball" | "mannequin") {
+  function addFromInventory(kind: "box" | "ball" | "purse" | "mannequin") {
     const id = nextId.current++;
     const base: SceneObject = {
       id,
@@ -1053,6 +1129,13 @@ export function StageScene() {
     } else if (kind === "ball") {
       base.position = [0, newSize, 2];
       base.size = newSize;
+    } else if (kind === "purse") {
+      // fixed handbag scale; the Size/L/B inputs are box-scale. Lifted onto
+      // the floor's top face (y=0.1) so the opening isn't partly buried.
+      base.position = [0, 0.1, 2];
+      base.size = PURSE_SIZE.height;
+      base.length = PURSE_SIZE.length;
+      base.breadth = PURSE_SIZE.breadth;
     }
     // mannequin stands at y=0 — its own geometry is already floor-relative,
     // and its rest pose defaults inside the Mannequin component
@@ -1253,8 +1336,12 @@ export function StageScene() {
         }}
       >
         <color attach="background" args={[BACKDROP_COLOR]} />
-        <PerspectiveCamera makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
+        <PerspectiveCamera ref={setOrbitCamera} makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
+        {/* Pinned to the orbit camera: left to follow the default camera, the
+            controls get rebuilt on the look-through swap and OrbitControls'
+            constructor re-aims the shot camera at the world origin. */}
         <OrbitControls
+          camera={orbitCamera ?? undefined}
           makeDefault
           enabled={!lookingThrough}
           target={[0, 1, 0]}
@@ -1533,6 +1620,7 @@ export function StageScene() {
                 {([
                   ["box", "Box"],
                   ["ball", "Ball"],
+                  ["purse", "Purse"],
                   ["mannequin", "Mannequin"],
                 ] as const).map(([kind, label]) => (
                   <button
