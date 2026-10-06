@@ -12,7 +12,13 @@
         "spine": [0.45, 0, 0], "head": [0.35, 0, 0],
         "leftArm": [-0.75, 0, -0.1], "leftElbow": [-0.35, 0, 0],
         "rightArm": [-0.5, 0, 0.25], "rightElbow": [-0.6, 0, 0]
-      }
+      },
+      "keyframes": [
+        { "time": 0, "position": [0, 0, -0.5], "rotation": [0, 0, 0], "pose": { "spine": [0.45, 0, 0], "head": [0.35, 0, 0], "leftArm": [-0.75, 0, -0.1], "leftElbow": [-0.35, 0, 0], "rightArm": [-0.5, 0, 0.25], "rightElbow": [-0.6, 0, 0] } },
+        { "time": 3, "position": [0, 0, -0.5], "rotation": [0, 0, 0], "pose": { "spine": [0.45, 0, 0], "head": [0.35, 0, 0], "leftArm": [-0.75, 0, -0.1], "leftElbow": [-0.35, 0, 0], "rightArm": [-0.5, 0, 0.25], "rightElbow": [-0.6, 0, 0] } },
+        { "time": 6, "position": [0, 0, -0.5], "rotation": [0, 0, 0], "pose": { "spine": [0, 0, 0], "head": [0, 0, 0], "leftArm": [0, 0, -0.15], "leftElbow": [0, 0, 0], "rightArm": [-0.3, 0, 0.2], "rightElbow": [-0.5, 0, 0] } },
+        { "time": 8, "position": [0, 0, -0.5], "rotation": [0, 0, 0], "pose": { "spine": [0, 0, 0], "head": [0, 0, 0], "leftArm": [0, 0, -0.15], "leftElbow": [0, 0, 0], "rightArm": [-0.3, 0, 0.2], "rightElbow": [-0.5, 0, 0] } }
+      ]
     },
     {
       "id": 7, "kind": "camera", "position": [0, 0.92, 0], "rotation": [1.25, 0, 0], "fov": 60,

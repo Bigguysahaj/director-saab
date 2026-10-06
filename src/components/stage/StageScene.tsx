@@ -9,10 +9,11 @@ import {
   KEYFRAME_EPSILON,
   TIMELINE_DURATION,
   type JointKey,
+  type MannequinPose,
   type SceneObject,
   type Vec3,
 } from "./types";
-import { deleteKeyframeNear, interpolateTransform, upsertKeyframe } from "./keyframes";
+import { deleteKeyframeNear, interpolatePose, interpolateTransform, upsertKeyframe } from "./keyframes";
 import { SCENE_SCHEMA, parseScene } from "./scene";
 import { FLY_BOOST, FLY_SPEED, MAX_FLY_DELTA, flyStep, hasFlyInput, lookStep, type FlyInput } from "./flyMath";
 import { PosePanel, JOINT_LABELS } from "./PosePanel";
@@ -20,7 +21,7 @@ import { Mannequin } from "./Mannequin";
 import { Timeline } from "./Timeline";
 import { CastPanel } from "./CastPanel";
 import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
-import { JOINTS } from "@/lib/poses/model";
+import { JOINTS, resolvePose } from "@/lib/poses/model";
 import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
 
 const BACKDROP_COLOR = "#e8e2d6";
@@ -423,7 +424,7 @@ function SceneContents({
               position={displayPosition}
               rotation={displayRotation}
               color={o.color ?? DEFAULT_MANNEQUIN_COLOR}
-              pose={o.pose}
+              pose={interpolatePose(o.keyframes, playheadTime) ?? o.pose}
               poseMode={o.id === poseModeId}
               activeJoint={o.id === poseModeId ? activeJoint : null}
               onSelectJoint={onSelectJoint}
@@ -1280,17 +1281,38 @@ export function StageScene() {
     setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, position: [x, y, z], rotation } : o)));
   }
 
-  /** Same idea as syncSelectedTransform, but for one limb's pivot rotation —
-   * joint poses are never keyframed (static/manual only), so this always
-   * writes straight through. */
+  /** The pose a mannequin shows at the playhead: its pose track if it has
+   * one, else its static pose. Fully resolved so edits can spread it. */
+  function poseAtPlayhead(o: SceneObject): MannequinPose {
+    return interpolatePose(o.keyframes, playheadTime) ?? resolvePose(o.pose);
+  }
+
+  /** Writes a pose edit for the selected mannequin. Once a figure has any
+   * pose keyframe the static pose is never shown, so editing it would look
+   * like nothing happened — instead the edit auto-keys at the playhead,
+   * keeping the interpolated position/rotation so the move isn't disturbed.
+   * Figures without pose keys keep the plain static write. */
+  function writeSelectedPose(edit: (current: MannequinPose) => MannequinPose) {
+    if (selectedId === null) return;
+    setObjects((prev) =>
+      prev.map((o) => {
+        if (o.id !== selectedId) return o;
+        const pose = edit(poseAtPlayhead(o));
+        if (!o.keyframes?.some((k) => k.pose)) return { ...o, pose };
+        const at = interpolateTransform(o.keyframes, playheadTime)!;
+        return { ...o, keyframes: upsertKeyframe(o.keyframes, playheadTime, at.position, at.rotation, pose) };
+      })
+    );
+  }
+
+  /** Same idea as syncSelectedTransform, but for one limb's pivot rotation.
+   * Unlike a body drag this writes straight through on every change: it goes
+   * to the static pose, or auto-keys at the playhead once the figure has a
+   * pose track (see writeSelectedPose). */
   function syncJointTransform() {
     if (selectedId === null || !effectiveActiveJoint || !activeJointNode) return;
     const rotation: Vec3 = [activeJointNode.rotation.x, activeJointNode.rotation.y, activeJointNode.rotation.z];
-    setObjects((prev) =>
-      prev.map((o) =>
-        o.id === selectedId ? { ...o, pose: { ...DEFAULT_POSE, ...o.pose, [effectiveActiveJoint]: rotation } } : o
-      )
-    );
+    writeSelectedPose((current) => ({ ...current, [effectiveActiveJoint]: rotation }));
   }
 
   // Persists the camera's live (imperatively-mutated) transform/FOV back
@@ -1396,13 +1418,20 @@ export function StageScene() {
    * the current playhead time — the only way a keyframed object's pose
    * actually changes, and how a static object gets its first keyframe. */
   function addKeyframe() {
-    if (!selected || !selectedNode || !canKeyframeSelection) return;
-    const { x, y, z } = selectedNode.position;
-    const rotation: Vec3 = [selectedNode.rotation.x, selectedNode.rotation.y, selectedNode.rotation.z];
+    // selectedNode lags a just-added object: the selection effect can run
+    // before the Canvas reconciler attaches its ref, so read the live map.
+    const node = selected && (selectedNode ?? nodes.current.get(selected.id));
+    if (!selected || !node || !canKeyframeSelection) return;
+    const { x, y, z } = node.position;
+    const rotation: Vec3 = [node.rotation.x, node.rotation.y, node.rotation.z];
     setObjects((prev) =>
-      prev.map((o) =>
-        o.id === selected.id ? { ...o, keyframes: upsertKeyframe(o.keyframes, playheadTime, [x, y, z], rotation) } : o
-      )
+      prev.map((o) => {
+        if (o.id !== selected.id) return o;
+        // A mannequin's key also captures the pose it shows right now, so
+        // its first key starts the pose track from the static pose.
+        const pose = o.kind === "mannequin" ? poseAtPlayhead(o) : undefined;
+        return { ...o, keyframes: upsertKeyframe(o.keyframes, playheadTime, [x, y, z], rotation, pose) };
+      })
     );
   }
 
@@ -1413,18 +1442,22 @@ export function StageScene() {
     setObjects((prev) =>
       prev.map((o) => {
         if (o.id !== selected.id) return o;
+        // Likewise for the pose track: when its last key goes, keep that
+        // pose as the static one instead of reverting to an old static pose.
+        const pose = removed.pose && !keyframes.some((k) => k.pose) ? resolvePose(removed.pose) : o.pose;
         if (keyframes.length === 0) {
           // last keyframe gone — freeze at its pose so the object doesn't
           // jump back to whatever the base position/rotation used to be
-          return { ...o, keyframes: undefined, position: removed.position, rotation: removed.rotation };
+          return { ...o, keyframes: undefined, position: removed.position, rotation: removed.rotation, pose };
         }
-        return { ...o, keyframes };
+        return { ...o, keyframes, pose };
       })
     );
   }
 
   const keyframeTimes = selected?.keyframes?.map((k) => k.time) ?? [];
   const hasKeyframeAtPlayhead = !!selected?.keyframes?.some((k) => Math.abs(k.time - playheadTime) < KEYFRAME_EPSILON);
+  const selectedPose = selected?.kind === "mannequin" ? poseAtPlayhead(selected) : undefined;
   const selectedDisplay =
     selected && (selected.keyframes?.length ? interpolateTransform(selected.keyframes, playheadTime) : { position: selected.position, rotation: selected.rotation });
 
@@ -1860,8 +1893,8 @@ export function StageScene() {
       )}
 
       {selected?.kind === "mannequin" && effectiveGizmoMode === "pose" && !isPlaying && (
-        <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selected.pose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
-          onChange={(pose) => setObjects((prev) => prev.map((o) => o.id === selectedId ? { ...o, pose } : o))} />
+        <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selectedPose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
+          onChange={(pose) => writeSelectedPose(() => pose)} />
       )}
 
       {selected && selectedDisplay && (
@@ -1874,7 +1907,7 @@ export function StageScene() {
               <TransformReadout
                 mode="rotate"
                 position={[0, 0, 0]}
-                rotation={selected.pose?.[effectiveActiveJoint] ?? DEFAULT_POSE[effectiveActiveJoint]}
+                rotation={(selectedPose ?? DEFAULT_POSE)[effectiveActiveJoint]}
                 label={JOINT_LABELS[effectiveActiveJoint]}
               />
             ) : (
