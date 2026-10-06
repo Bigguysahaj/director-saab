@@ -2,14 +2,20 @@ import { expect, test } from "@playwright/test";
 
 // Regression: stopping a "Record take" early used to leave its take flag set,
 // so the next "Record clip" with the timeline paused stopped itself at once.
-test.setTimeout(60_000);
+test.setTimeout(120_000);
 test("a take stopped early doesn't cut off the next manual recording", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/stage");
   await expect(page.locator("canvas")).toBeVisible();
   const stop = page.getByRole("button", { name: "● Stop recording", exact: true });
+  // Recording starts only after camera view has rendered a few frames; the
+  // first camera-view render compiles shaders, which under CI's software
+  // WebGL can block the main thread for several seconds.
+  const STARTS = { timeout: 30_000 };
 
   await page.getByRole("button", { name: "Record take", exact: true }).click();
-  await expect(stop).toBeVisible();
+  await expect(stop).toBeVisible(STARTS);
   const takeClip = page.waitForEvent("download");
   await stop.click();
   expect((await takeClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.webm$/);
@@ -18,11 +24,12 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   await page.waitForTimeout(9000);
 
   await page.getByRole("button", { name: "Record clip", exact: true }).click();
-  await expect(stop).toBeVisible();
+  await expect(stop).toBeVisible(STARTS);
   // Long enough for the old bug's effect to have stopped it.
   await page.waitForTimeout(1500);
   await expect(stop).toBeVisible();
   const manualClip = page.waitForEvent("download");
   await stop.click();
   expect((await manualClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.webm$/);
+  expect(errors).toEqual([]);
 });
