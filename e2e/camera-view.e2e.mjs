@@ -186,7 +186,78 @@ await enterCameraView();
   check("right-click menu suppressed in camera view", blocked === true);
 }
 
-// ---------------------------------------------------------------- 7. typing in a field must not fly
+// ---------------------------------------------------------------- 7. trackpad alternatives
+await freshStage();
+await enterCameraView();
+{
+  const controls = page.getByLabel("Camera view controls");
+  check("shortcut details start collapsed", !(await controls.locator("details").evaluate((el) => el.open)));
+  check("collapsed camera controls fit in a compact single row", (await controls.boundingBox()).height < 60);
+  await controls.locator("summary").click();
+  check("camera view labels yaw, pitch, roll, zoom and dolly shortcuts",
+    await controls.getByText("Pan / yaw — left / right").isVisible() &&
+    await controls.getByText("Tilt / pitch — up / down").isVisible() &&
+    await controls.getByText("Roll — left / right").isVisible() &&
+    await controls.getByText("Zoom in / out", { exact: true }).isVisible() &&
+    await controls.getByText("Dolly zoom in / out", { exact: true }).isVisible());
+  await controls.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  check("shortcut details can be closed with the keyboard", !(await controls.locator("details").evaluate((el) => el.open)));
+  const before = await cam();
+  await page.keyboard.down("f");
+  await page.mouse.move(400, 200);
+  await page.mouse.down();
+  await page.mouse.move(500, 240, { steps: 8 });
+  // Releasing F must stop the gesture even if the mouse is still held.
+  await page.keyboard.up("f");
+  await settle();
+  const after = await cam();
+  check("F + left-drag yaws and pitches without moving the camera",
+    fwd(before.rotation).angleTo(fwd(after.rotation)) > 0.2 &&
+    fwd(after.rotation).y < fwd(before.rotation).y - 0.05 &&
+    v(after.position).distanceTo(v(before.position)) < 1e-9);
+  await page.mouse.move(550, 270, { steps: 8 });
+  await page.mouse.up();
+  await settle();
+  check("releasing F ends look immediately", v((await cam()).rotation).distanceTo(v(after.rotation)) < 1e-9);
+
+  await page.getByRole("button", { name: "Drag to look off", exact: true }).click();
+  check("Drag to look button exposes its active state", await page.getByRole("button", { name: "Drag to look on", exact: true }).getAttribute("aria-pressed") === "true");
+  const toggledBefore = await cam();
+  await page.mouse.move(400, 200);
+  await page.mouse.down();
+  await page.mouse.move(500, 250, { steps: 8 });
+  await page.mouse.up();
+  await settle();
+  const toggledAfter = await cam();
+  check("Drag to look allows plain left-drag", fwd(toggledAfter.rotation).angleTo(fwd(toggledBefore.rotation)) > 0.2);
+  await page.getByRole("button", { name: "Drag to look on", exact: true }).click();
+  await page.mouse.move(400, 200);
+  await page.mouse.down();
+  await page.mouse.move(500, 250, { steps: 8 });
+  await page.mouse.up();
+  await settle();
+  check("turning Drag to look off restores ordinary left-drag", v((await cam()).rotation).distanceTo(v(toggledAfter.rotation)) < 1e-9);
+
+  // A cancelled trackpad gesture must persist and release its capture.
+  await page.keyboard.down("f");
+  await page.mouse.move(400, 200);
+  await page.mouse.down();
+  await page.mouse.move(440, 220, { steps: 4 });
+  await page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    canvas.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true }));
+  });
+  await settle();
+  const cancelled = await cam();
+  await page.mouse.move(500, 270, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up("f");
+  await settle();
+  check("pointer cancellation stops and persists look", v((await cam()).rotation).distanceTo(v(cancelled.rotation)) < 1e-9 && v(cancelled.rotation).distanceTo(v(toggledAfter.rotation)) > 0.05);
+}
+
+// ---------------------------------------------------------------- 8. typing in a field must not fly
 await freshStage();
 await enterCameraView();
 {
@@ -194,13 +265,21 @@ await enterCameraView();
   const input = page.locator('input[type="number"]').first();
   await input.focus();
   const before = await cam();
-  await page.keyboard.type("wasdqe", { delay: 80 });
+  await page.keyboard.type("wasdqef", { delay: 80 });
   await page.waitForTimeout(400);
   const after = await cam();
   check("typing in an input doesn't fly the camera", v(after.position).distanceTo(v(before.position)) < 1e-9);
+  await page.keyboard.down("f");
+  await page.mouse.move(400, 200);
+  await page.mouse.down();
+  await page.mouse.move(500, 250, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("f");
+  await settle();
+  check("F pressed in a field doesn't enable look", v((await cam()).rotation).distanceTo(v(before.rotation)) < 1e-9);
 }
 
-// ---------------------------------------------------------------- 8. persistence + exit
+// ---------------------------------------------------------------- 9. persistence + exit
 await freshStage();
 await enterCameraView();
 {

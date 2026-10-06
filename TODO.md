@@ -56,11 +56,14 @@ https://rystorm.com/blog/translate-gizmo-design.
   back out — user wants to build that part themselves. **Fly controls**
   (`FlyController` in `StageScene.tsx`, maths in `flyMath.ts`): while in camera
   view, W/A/S/D fly along the view / strafe, Q/E go down/up (world vertical),
-  Shift is a 3x boost, and holding the right mouse button while dragging
-  looks around — so the camera can be repositioned without round-tripping
+  Shift is a 3x boost, and right-drag, F + left-drag, or the "Drag to look"
+  toggle looks around. Camera view has a compact top bar with a collapsible
+  "Shortcuts" guide grouping movement, rotation, and lens controls. Look
+  gestures intercept scene/gizmo events and stop on release, cancellation,
+  or focus loss — so the camera can be repositioned without round-tripping
   through the orbit view (its own gizmo is unusable there since it renders at
-  the viewer's eye point). Right-drag rather than left so it never fights
-  gizmos or click-to-select; yaw is about world-up, pitch is clamped to
+  the viewer's eye point). Ordinary left-drag still handles selection and
+  gizmos when Drag to look is off and F isn't held; yaw is about world-up, pitch is clamped to
   ±85°, existing roll is preserved. Clamped to the room, per-frame delta
   capped at 0.1s, ignored while typing in an input or during a whip move, and
   the result is written back to the layout (and so persisted) when input
