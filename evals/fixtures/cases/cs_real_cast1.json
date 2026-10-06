@@ -1,0 +1,8 @@
+{
+  "kind": "character_sheet",
+  "provenance": "REAL: 2026-09-25 sheet for Cast 1, reassembled from the 9 stored crops (exact thirds, so the grid image is reproduced) and downscaled to 1500px.",
+  "description": "Known-good 3x3 sheet (no gutters).",
+  "expect": "pass",
+  "reference": "../images/cast1_ref.jpg",
+  "output": "../images/sheet_cast1_2026-09-25.jpg"
+}

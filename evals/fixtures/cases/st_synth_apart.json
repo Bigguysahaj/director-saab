@@ -1,0 +1,25 @@
+{
+  "kind": "screen_test",
+  "provenance": "SYNTHETIC stage keypoints (figures apart) + REAL output (figures together).",
+  "description": "Known-bad: two separately blocked figures came back standing together.",
+  "expect": "fail",
+  "expect_failures": [
+    "position",
+    "spacing",
+    "no_new_contact"
+  ],
+  "stage_keypoints": "../stage/stage_synth_apart.json",
+  "output": "../images/screen_test_output_2026-09-25.jpg",
+  "cast": [
+    {
+      "name": "Cast 1",
+      "color": "#c65d3b",
+      "reference": "../images/cast1_ref.jpg"
+    },
+    {
+      "name": "Cast 2",
+      "color": "#3b6b5c",
+      "reference": "../images/cast2_ref.jpg"
+    }
+  ]
+}

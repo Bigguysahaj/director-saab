@@ -1,0 +1,23 @@
+{
+  "kind": "screen_test",
+  "provenance": "SYNTHETIC: Cast 2 painted out of the real output (make_synthetic.py).",
+  "description": "Known-bad: one person where the stage has two figures (merged or dropped figure).",
+  "expect": "fail",
+  "expect_failures": [
+    "person_count"
+  ],
+  "stage_keypoints": "../stage/stage_synth_matched.json",
+  "output": "../images/synthetic_output_missing_person.jpg",
+  "cast": [
+    {
+      "name": "Cast 1",
+      "color": "#c65d3b",
+      "reference": "../images/cast1_ref.jpg"
+    },
+    {
+      "name": "Cast 2",
+      "color": "#3b6b5c",
+      "reference": "../images/cast2_ref.jpg"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "screen_test",
+  "provenance": "SYNTHETIC stage keypoints (hand-annotated from the real output) + REAL output.",
+  "description": "Known-good: blocking that the real output matches. Proves detector noise alone does not fail a correct result.",
+  "expect": "pass",
+  "stage_keypoints": "../stage/stage_synth_matched.json",
+  "output": "../images/screen_test_output_2026-09-25.jpg",
+  "cast": [
+    {
+      "name": "Cast 1",
+      "color": "#c65d3b",
+      "reference": "../images/cast1_ref.jpg"
+    },
+    {
+      "name": "Cast 2",
+      "color": "#3b6b5c",
+      "reference": "../images/cast2_ref.jpg"
+    }
+  ]
+}

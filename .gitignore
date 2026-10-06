@@ -53,3 +53,9 @@ next-env.d.ts
 # browser test output
 /playwright-report/
 /test-results/
+
+# eval harness: python venv, downloaded model weights, reports
+/evals/.venv/
+/evals/.models/
+/evals/.out/
+__pycache__/

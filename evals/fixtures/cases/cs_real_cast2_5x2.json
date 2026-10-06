@@ -1,0 +1,11 @@
+{
+  "kind": "character_sheet",
+  "provenance": "REAL: 2026-09-25 sheet for Cast 2, reassembled from the 9 stored crops.",
+  "description": "Known-bad: the model returned a 5x2 layout; cropping it by thirds cuts panels apart.",
+  "expect": "fail",
+  "expect_failures": [
+    "grid_structure"
+  ],
+  "reference": "../images/cast2_ref.jpg",
+  "output": "../images/sheet_cast2_2026-09-25.jpg"
+}

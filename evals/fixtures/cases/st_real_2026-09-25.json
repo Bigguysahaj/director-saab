@@ -1,0 +1,25 @@
+{
+  "kind": "screen_test",
+  "provenance": "REAL: /stage capture + the Screen Test output it produced on 2026-09-25 (gemini image model). Stage keypoints hand-annotated.",
+  "description": "The reported failure. The orange mannequin is seated; the model made it a standing man, reframed the shot (people much larger), and turned two separately placed mannequins into a couple.",
+  "expect": "fail",
+  "expect_failures": [
+    "limb_proportions",
+    "position"
+  ],
+  "stage_photo": "../images/stage_2026-09-25.jpg",
+  "stage_keypoints": "../stage/stage_2026-09-25.json",
+  "output": "../images/screen_test_output_2026-09-25.jpg",
+  "cast": [
+    {
+      "name": "Cast 1",
+      "color": "#c65d3b",
+      "reference": "../images/cast1_ref.jpg"
+    },
+    {
+      "name": "Cast 2",
+      "color": "#3b6b5c",
+      "reference": "../images/cast2_ref.jpg"
+    }
+  ]
+}

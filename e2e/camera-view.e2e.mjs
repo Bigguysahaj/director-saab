@@ -31,6 +31,7 @@ const right = (rot) => new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(...
 const fmt = (vec) => vec.toArray().map((n) => n.toFixed(2)).join(",");
 
 const browser = await chromium.launch({
+  ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
   args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
 const page = await browser.newPage({ viewport: { width: 800, height: 500 } });

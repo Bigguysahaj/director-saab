@@ -1,0 +1,40 @@
+{
+  "_comment": "All pass/fail thresholds for the eval harness. Coordinates are normalized: x as a fraction of image width, y as a fraction of image height. Lengths used for scale/proportion are in 'image heights'. See evals/README.md for what each metric means.",
+
+  "detection": {
+    "face_min_score": 0.8,
+    "pose_min_visibility": 0.5,
+    "pose_face_match_max_dist": 1.0,
+    "max_people": 6
+  },
+
+  "screen_test": {
+    "identity_min_cosine": 0.363,
+    "order_min_separation": 0.02,
+    "position_max_dx": 0.08,
+    "position_max_dy": 0.10,
+    "spacing_max_ddx": 0.08,
+    "relative_scale_max_ratio": 1.35,
+    "absolute_scale_max_ratio": 1.6,
+    "limb_angle_max_mean_deg": 30,
+    "limb_angle_min_length": 0.25,
+    "limb_proportion_max_ratio": 2.0,
+    "facing_min_shoulder_dx": 0.35,
+    "contact_margin_output": -0.10,
+    "contact_margin_stage": 0.25
+  },
+
+  "character_sheet": {
+    "grid_size": 3,
+    "analysis_long_side": 1000,
+    "seam_window": 0.02,
+    "seam_min_score": 3.0,
+    "spurious_seam_score": 3.0,
+    "border_ignore": 0.03,
+    "expected_face_cells": [0, 1, 2, 4, 5, 6, 7, 8],
+    "min_face_cells": 6,
+    "max_faces_per_cell": 1,
+    "identity_min_cosine": 0.363,
+    "min_identity_cells": 5
+  }
+}

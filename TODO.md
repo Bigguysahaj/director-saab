@@ -20,10 +20,13 @@ https://rystorm.com/blog/translate-gizmo-design.
 - **Props (box/ball):** free drag, live X/Y/Z readout. Boxes can be
   stretched into cuboids via the Inventory row's Size (height) / L (X) / B
   (Z) inputs. Ctrl+drag leaves a duplicate behind at the start position.
-- **Mannequin:** posable now — four forward-kinematics joints (shoulder/hip
-  per side; no elbow/knee, no IK) via a "Pose" gizmo mode: click a joint
-  handle, rotate it with the same TransformControls used everywhere else.
-  Whole-figure move/rotate is unchanged. Looked at driving that rig from
+- **Mannequin:** 14 connected joints with selectable body parts, posed
+  through a "Pose" gizmo mode / pose editor (forward kinematics only, no
+  IK). 14 built-in presets plus a pose library — save, search, delete,
+  import/export JSON packs (versioned, validated), optionally scoped to a
+  cast member. Presets set joint rotations only; library is per-browser
+  (`localStorage`). Details: `docs/architecture/posing.md`. Whole-figure
+  move/rotate is unchanged. Looked at driving that rig from
   webcam mocap instead of hand-posing: FreeMoCap (https://freemocap.org/)
   is the obvious candidate but it's AGPL/copyleft and Python-only
   (multi-cam capture app, offline triangulate-and-export pipeline) — wrong
@@ -36,7 +39,7 @@ https://rystorm.com/blog/translate-gizmo-design.
   Single-camera MediaPipe pose is 2.5D (image-plane x/y + relative z, not
   triangulated metric 3D like FreeMoCap), which is fine for a blocking
   stand-in, not for research-grade mocap. Not started. **Future plan:**
-  elbow/knee joints and real IK; live mocap driving the rig or seeding
+  real IK; live mocap driving the rig or seeding
   keyframes instead of posing by hand.
 - **Light stands:** move and rotate to re-aim — the spotlight's target is a
   child Object3D of the stand's group (not a fixed world point), so the beam
@@ -92,15 +95,27 @@ https://rystorm.com/blog/translate-gizmo-design.
   own move presets above). **Future plan:** loop/ping-pong playback, more
   than one clip, eased (not just linear) interpolation, keyframing joint
   poses too.
-- **Cast:** a "+ Cast" popover — upload one reference photo, generate a
-  9-shot character sheet (4 body angles + 5 expressions) via
-  `/api/character-sheet` (one request per shot, always against the
+- **Cast:** roster built on `/audition` — upload one reference photo per
+  member, generate a 9-shot character sheet (4 body angles + 5 expressions)
+  via `/api/character-sheet` (one request per shot, always against the
   original photo — see `src/lib/characterSheet.ts` for the anti-drift
-  rationale), shown in a grid with per-shot error handling and a running
-  cost total. Standalone reference-sheet browser only — results aren't
-  attached to a mannequin or persisted across reloads. **Future plan:**
-  attach a generated sheet to a specific mannequin (as its texture/
-  reference, or just linked metadata), persist sheets alongside the layout.
+  rationale), per-shot error handling and running cost (actual billed cost
+  passed through from OpenRouter where reported). Default model is
+  `google/gemini-3.1-flash-lite-image` (Muse Image is region-blocked from
+  the dev IP). Roster, photos and shots persist on disk under `.data/cast/`
+  (gitignored) via `/api/cast`, not the browser. On `/stage`, the "+ Cast"
+  popover assigns a roster member to the selected mannequin, which copies
+  the mannequin's color-code onto the member (`stageColor`).
+- **Screen Test (on `/audition`):** composites a captured `/stage` photo
+  with the reference photos of whichever cast members are assigned to its
+  color-coded mannequins, into a photoreal shot on a fixed garden backdrop
+  (`src/lib/screenTest.ts` — prompt is strict about keeping blocking/
+  spacing exact, after an early test merged two mannequins into one
+  couple). Model chosen per run with the "DoP" picker, fed by OpenRouter's
+  live image-model catalog via `/api/image-models` (fallback list in
+  `src/lib/imageModels.ts`). Only the latest result is kept
+  (`.data/screen-test/`). **Future plan:** selectable backdrops, result
+  history, tests for the cast/screen-test routes (none yet).
 - **Layout persistence:** every change (drag, rotate, add, duplicate)
   auto-saves to `localStorage`; "Reset layout" clears it and returns to the
   default arrangement.

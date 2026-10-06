@@ -1,0 +1,11 @@
+{
+  "kind": "character_sheet",
+  "provenance": "SYNTHETIC pairing: Cast 2 reference vs the real Cast 1 sheet.",
+  "description": "Known-bad identity: valid grid, wrong person.",
+  "expect": "fail",
+  "expect_failures": [
+    "identity"
+  ],
+  "reference": "../images/cast2_ref.jpg",
+  "output": "../images/sheet_cast1_2026-09-25.jpg"
+}

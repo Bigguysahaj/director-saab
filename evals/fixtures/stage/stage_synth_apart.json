@@ -1,0 +1,122 @@
+{
+  "schema": "director-stage-keypoints/v1",
+  "source": "SYNTHETIC: same as stage_synth_matched.json, but the green (Cast 2) figure stood 300px (~0.20 of frame width) further left, clear of the orange figure, with no contact. Models the real failure report: separately-blocked mannequins came back as a side-by-side couple.",
+  "image_size": [
+    1472,
+    720
+  ],
+  "units": "px",
+  "figures": [
+    {
+      "color": "#c65d3b",
+      "keypoints": {
+        "head": [
+          730,
+          158
+        ],
+        "nose": [
+          733,
+          169
+        ],
+        "right_shoulder": [
+          663,
+          219
+        ],
+        "left_shoulder": [
+          802,
+          219
+        ],
+        "right_elbow": [
+          655,
+          313
+        ],
+        "left_elbow": [
+          811,
+          313
+        ],
+        "right_wrist": [
+          658,
+          419
+        ],
+        "left_wrist": [
+          805,
+          419
+        ],
+        "right_hip": [
+          699,
+          424
+        ],
+        "left_hip": [
+          769,
+          424
+        ],
+        "right_knee": [
+          699,
+          536
+        ],
+        "left_knee": [
+          769,
+          536
+        ],
+        "right_ankle": [
+          694,
+          658
+        ],
+        "left_ankle": [
+          774,
+          658
+        ]
+      }
+    },
+    {
+      "color": "#3b6b5c",
+      "keypoints": {
+        "head": [
+          330,
+          183
+        ],
+        "nose": [
+          330,
+          188
+        ],
+        "right_shoulder": [
+          277,
+          247
+        ],
+        "left_shoulder": [
+          347,
+          241
+        ],
+        "right_elbow": [
+          266,
+          324
+        ],
+        "left_elbow": [
+          350,
+          320
+        ],
+        "right_wrist": [
+          258,
+          408
+        ],
+        "left_wrist": [
+          328,
+          362
+        ],
+        "right_hip": [
+          288,
+          378
+        ],
+        "left_hip": [
+          340,
+          378
+        ],
+        "right_knee": null,
+        "left_knee": null,
+        "right_ankle": null,
+        "left_ankle": null
+      }
+    }
+  ],
+  "contacts": []
+}

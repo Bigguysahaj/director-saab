@@ -1,0 +1,23 @@
+{
+  "kind": "screen_test",
+  "provenance": "SYNTHETIC cast list: Cast 2 reference swapped for Cast 1 photo; REAL output.",
+  "description": "Known-bad identity: the woman in the output is not the person in Cast 2 reference.",
+  "expect": "fail",
+  "expect_failures": [
+    "identity"
+  ],
+  "stage_keypoints": "../stage/stage_synth_matched.json",
+  "output": "../images/screen_test_output_2026-09-25.jpg",
+  "cast": [
+    {
+      "name": "Cast 1",
+      "color": "#c65d3b",
+      "reference": "../images/cast1_ref.jpg"
+    },
+    {
+      "name": "Cast 2",
+      "color": "#3b6b5c",
+      "reference": "../images/cast1_ref.jpg"
+    }
+  ]
+}

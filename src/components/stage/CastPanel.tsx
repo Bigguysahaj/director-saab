@@ -32,7 +32,7 @@ export function CastPanel({
 
   useEffect(() => {
     if (!open) return;
-    // Reads IndexedDB, so — same reasoning as Audition.tsx's own load — this
+    // Fetches /api/cast, so — same reasoning as Audition.tsx's own load — this
     // has to be an effect, not a lazy initializer or a render-time read.
     let cancelled = false;
     loadCast().then((loaded) => {
