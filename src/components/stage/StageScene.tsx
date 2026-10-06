@@ -13,6 +13,7 @@ import {
   type Vec3,
 } from "./types";
 import { deleteKeyframeNear, interpolateTransform, upsertKeyframe } from "./keyframes";
+import { SCENE_SCHEMA, parseScene } from "./scene";
 import { FLY_BOOST, FLY_SPEED, MAX_FLY_DELTA, flyStep, hasFlyInput, lookStep, type FlyInput } from "./flyMath";
 import { PosePanel, JOINT_LABELS } from "./PosePanel";
 import { Mannequin } from "./Mannequin";
@@ -69,6 +70,9 @@ function ImageBackdropWall({ url }: { url: string }) {
 const PROP_COLOR = "#2a2a28";
 const PALETTE = STAGE_PALETTE.map((c) => c.hex);
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
+// Handbag scale next to the ~1.75-unit mannequin.
+const PURSE_SIZE = { height: 0.3, length: 0.45, breadth: 0.2 };
+const PURSE_WALL = 0.012;
 const DEFAULT_FOV = 50;
 // Bump the suffix if SceneObject's shape ever changes, so old saved layouts
 // are ignored instead of crashing on load. v2 adds mannequin `pose` and
@@ -163,6 +167,62 @@ function ShapeProp({ id, shape, position, rotation, color, size, length, breadth
 }
 
 /**
+ * Open-top hollow bag (floor + four walls + a strap), for shots from inside
+ * it looking up — a solid box would back-face cull and the camera would see
+ * straight through it. Walls are double-sided so the interior reads from
+ * inside. The group origin is the bag's floor center, so it sits at y=0.
+ */
+function Purse({ id, position, rotation, color, height, length, breadth, selected, onSelect, objRef }: ItemProps & {
+  position: Vec3;
+  rotation: Vec3;
+  color: string;
+  height: number;
+  length: number;
+  breadth: number;
+}) {
+  const t = PURSE_WALL;
+  const panels: { pos: Vec3; dims: Vec3 }[] = [
+    { pos: [0, t / 2, 0], dims: [length, t, breadth] },
+    { pos: [0, height / 2, breadth / 2 - t / 2], dims: [length, height, t] },
+    { pos: [0, height / 2, -breadth / 2 + t / 2], dims: [length, height, t] },
+    { pos: [length / 2 - t / 2, height / 2, 0], dims: [t, height, breadth] },
+    { pos: [-length / 2 + t / 2, height / 2, 0], dims: [t, height, breadth] },
+  ];
+  const material = (
+    <meshStandardMaterial
+      color={color}
+      roughness={0.6}
+      side={THREE.DoubleSide}
+      emissive={selected ? "#ffffff" : "#000000"}
+      emissiveIntensity={selected ? 0.15 : 0}
+    />
+  );
+  return (
+    <group
+      ref={(g) => objRef(id, g)}
+      position={position}
+      rotation={rotation}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        onSelect(id);
+      }}
+    >
+      {panels.map(({ pos, dims }, i) => (
+        <mesh key={i} position={pos} castShadow receiveShadow>
+          <boxGeometry args={dims} />
+          {material}
+        </mesh>
+      ))}
+      {/* strap: half-torus arching over the opening along X */}
+      <mesh position={[0, height, 0]} castShadow>
+        <torusGeometry args={[length * 0.32, 0.012, 8, 24, Math.PI]} />
+        {material}
+      </mesh>
+    </group>
+  );
+}
+
+/**
  * A softbox-on-a-stand light. The spotlight's target is a plain Object3D
  * nested in the same group (not a fixed world coordinate) so the beam turns
  * with the stand instead of always pointing at a hardcoded spot — that's
@@ -252,7 +312,8 @@ function CameraMarker({ id, position, rotation, selected, onSelect, objRef, look
         </mesh>
       </group>
       {/* PerspectiveCamera looks down local -Z by default, same direction the lens cone points */}
-      <PerspectiveCamera ref={camRef} makeDefault={lookingThrough} fov={fov} />
+      {/* near=0.01 so the camera can sit inside a purse without clipping its walls */}
+      <PerspectiveCamera ref={camRef} makeDefault={lookingThrough} fov={fov} near={0.01} />
     </group>
   );
 }
@@ -337,6 +398,20 @@ function SceneContents({
             />
           );
         }
+        if (o.kind === "purse") {
+          return (
+            <Purse
+              key={o.id}
+              {...common}
+              position={displayPosition}
+              rotation={displayRotation}
+              color={o.color ?? PALETTE[0]}
+              height={o.size ?? PURSE_SIZE.height}
+              length={o.length ?? PURSE_SIZE.length}
+              breadth={o.breadth ?? PURSE_SIZE.breadth}
+            />
+          );
+        }
         if (o.kind === "light") {
           return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
         }
@@ -360,8 +435,8 @@ function SceneContents({
           <CameraMarker
             key={o.id}
             {...common}
-            position={o.position}
-            rotation={o.rotation}
+            position={displayPosition}
+            rotation={displayRotation}
             lookingThrough={o.id === lookingThroughId}
             fov={o.fov ?? DEFAULT_FOV}
             camRef={cameraRef}
@@ -404,8 +479,8 @@ const MOVE_SHORT_LABELS: Record<MoveKind, string> = {
 const MOVE_ROWS = [
   ["dolly-zoom-out", "dolly-zoom-in", "Dolly zoom"],
   ["zoom-out", "zoom-in", "Zoom"],
-  ["pan-top", "pan-bottom", "Tilt"],
-  ["pan-left", "pan-right", "Pan"],
+  ["pan-top", "pan-bottom", "Tilt / pitch"],
+  ["pan-left", "pan-right", "Pan / yaw"],
   ["roll-left", "roll-right", "Roll"],
 ] as const;
 // How fast each move progresses per second while held.
@@ -598,21 +673,25 @@ function WhipMoveAnimator({
 /**
  * Fly controls for the camera while looking through it: W/A/S/D move along
  * the view (Q/E down/up, Shift for boost), and holding the right mouse button
- * while dragging looks around. Like the move animators, it mutates the
+ * while dragging looks around. F + primary drag and the Drag to look
+ * toggle offer the same control without a secondary mouse button.
+ * Like the move animators, it mutates the
  * camera's live node directly every frame and only writes back to React
  * state (`onSettled`) once the input stops, so there's no re-render per frame.
- * Right-drag rather than left-drag so it never fights the gizmos or
- * click-to-select. Does nothing outside camera view, and yields to a whip
+ * Look gestures are intercepted before gizmos and click-to-select.
+ * Does nothing outside camera view, and yields to a whip
  * move that's mid-flight since both drive the same node.
  */
 function FlyController({
   active,
+  dragLookEnabled,
   nodesRef,
   cameraIdRef,
   whipRef,
   onSettled,
 }: {
   active: boolean;
+  dragLookEnabled: boolean;
   nodesRef: React.RefObject<Map<number, THREE.Object3D>>;
   cameraIdRef: React.RefObject<number | null>;
   whipRef: React.RefObject<WhipState | null>;
@@ -630,9 +709,24 @@ function FlyController({
   useEffect(() => {
     if (!active) return;
     const pressed = keys.current;
-    let looking = false;
+    let lookPointerId: number | null = null;
+    let lookButton = 2;
+    let suppressClick = false;
     let lastX = 0;
     let lastY = 0;
+    const originalCursor = canvas.style.cursor;
+    const updateCursor = () => {
+      canvas.style.setProperty("cursor", lookPointerId !== null ? "grabbing" : dragLookEnabled || pressed.has("KeyF") ? "grab" : originalCursor);
+    };
+    const stopLooking = () => {
+      if (lookPointerId === null) return;
+      const pointerId = lookPointerId;
+      lookPointerId = null;
+      if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+      updateCursor();
+      onSettledRef.current();
+    };
+    updateCursor();
 
     const cameraNode = () => {
       const id = cameraIdRef.current;
@@ -648,28 +742,46 @@ function FlyController({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       pressed.add(e.code);
+      if (e.code === "KeyF") {
+        e.preventDefault();
+        updateCursor();
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       pressed.delete(e.code);
+      if (e.code === "KeyF") {
+        if (!dragLookEnabled && lookButton === 0) stopLooking();
+        updateCursor();
+      }
     };
     const onBlur = () => {
       pressed.clear();
-      if (looking) {
-        looking = false;
-        onSettledRef.current();
-      }
+      stopLooking();
+      updateCursor();
+      flushMoving();
     };
     const onPointerDown = (e: PointerEvent) => {
-      if (e.button !== 2) return;
-      looking = true;
+      suppressClick = false;
+      if (e.button !== 2 && !(e.button === 0 && (dragLookEnabled || pressed.has("KeyF")))) return;
+      if (lookPointerId !== null) return;
+      // Capture before the scene/gizmo handlers, so a look drag cannot
+      // select or manipulate a prop beneath the pointer.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      suppressClick = true;
+      lookPointerId = e.pointerId;
+      lookButton = e.button;
       lastX = e.clientX;
       lastY = e.clientY;
       canvas.setPointerCapture(e.pointerId);
+      updateCursor();
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!looking) return;
+      if (e.pointerId !== lookPointerId) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
@@ -678,33 +790,49 @@ function FlyController({
       if (node && !whipRef.current) lookStep(node.quaternion, dx, dy);
     };
     const onPointerUp = (e: PointerEvent) => {
-      if (e.button !== 2 || !looking) return;
-      looking = false;
-      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-      onSettledRef.current();
+      if (e.pointerId !== lookPointerId) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      stopLooking();
+    };
+    const onLostPointerCapture = (e: PointerEvent) => {
+      if (e.pointerId === lookPointerId) stopLooking();
+    };
+    const onClick = (e: MouseEvent) => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
     };
     const onContextMenu = (e: Event) => e.preventDefault();
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointerdown", onPointerDown, true);
+    canvas.addEventListener("pointermove", onPointerMove, true);
+    canvas.addEventListener("pointerup", onPointerUp, true);
+    canvas.addEventListener("pointercancel", onPointerUp, true);
+    canvas.addEventListener("lostpointercapture", onLostPointerCapture);
+    canvas.addEventListener("click", onClick, true);
     canvas.addEventListener("contextmenu", onContextMenu);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointerdown", onPointerDown, true);
+      canvas.removeEventListener("pointermove", onPointerMove, true);
+      canvas.removeEventListener("pointerup", onPointerUp, true);
+      canvas.removeEventListener("pointercancel", onPointerUp, true);
+      canvas.removeEventListener("lostpointercapture", onLostPointerCapture);
+      canvas.removeEventListener("click", onClick, true);
       canvas.removeEventListener("contextmenu", onContextMenu);
       pressed.clear();
-      if (looking) onSettledRef.current();
+      stopLooking();
+      canvas.style.setProperty("cursor", originalCursor);
       flushMoving();
     };
-  }, [active, canvas, cameraIdRef, nodesRef, whipRef]);
+  }, [active, dragLookEnabled, canvas, cameraIdRef, nodesRef, whipRef]);
 
   useFrame((_, delta) => {
     if (!active) return;
@@ -805,9 +933,11 @@ export function StageScene() {
   const [newLength, setNewLength] = useState(0.8);
   const [newBreadth, setNewBreadth] = useState(0.8);
   const [lookingThrough, setLookingThrough] = useState(false);
+  const [dragLookEnabled, setDragLookEnabled] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
+  const [orbitCamera, setOrbitCamera] = useState<THREE.PerspectiveCamera | null>(null);
   const [backdrop, setBackdrop] = useState<Backdrop>({ kind: "plain" });
   // Session-only: the object URL dies with the tab, so the image isn't persisted.
   useEffect(() => {
@@ -844,7 +974,9 @@ export function StageScene() {
   }
 
   async function capturePhoto() {
-    if (!cameraObj) return;
+    // No canvas until the renderer is created (onCreated) — bail before
+    // switching views, or an early click strands you in camera view.
+    if (!cameraObj || !canvasEl.current) return;
     const wasLookingThrough = lookingThrough;
     if (!wasLookingThrough) {
       setLookingThrough(true);
@@ -876,12 +1008,36 @@ export function StageScene() {
     }, "image/png");
   }
 
+  // Set while a "Record take" is running: the recorder stops itself when
+  // timeline playback reaches the end (see the effect below).
+  const recordingTake = useRef(false);
+
+  async function recordTake() {
+    if (isRecording || !cameraObj) return;
+    setIsPlaying(false);
+    setPlayheadTime(0);
+    await toggleRecording();
+    // toggleRecording can bail before starting (no canvas yet) — only arm
+    // the take if a recorder is actually running.
+    if (mediaRecorder.current?.state !== "recording") return;
+    recordingTake.current = true;
+    setIsPlaying(true);
+  }
+
+  useEffect(() => {
+    if (isRecording && recordingTake.current && !isPlaying) {
+      recordingTake.current = false;
+      mediaRecorder.current?.stop();
+    }
+  }, [isRecording, isPlaying]);
+
   async function toggleRecording() {
     if (isRecording) {
       mediaRecorder.current?.stop();
       return;
     }
-    if (!cameraObj) return;
+    // Same early-click guard as capturePhoto.
+    if (!cameraObj || !canvasEl.current) return;
     const wasLookingThrough = lookingThrough;
     if (!wasLookingThrough) {
       setLookingThrough(true);
@@ -899,6 +1055,9 @@ export function StageScene() {
       if (e.data.size > 0) recordedChunks.current.push(e.data);
     };
     recorder.onstop = () => {
+      // Every stop path (button, take end, pause) lands here, so a take cut
+      // short can't leave the flag set and kill the next manual recording.
+      recordingTake.current = false;
       downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.webm`);
       setIsRecording(false);
       if (autoEnteredCameraView.current) setLookingThrough(false);
@@ -982,6 +1141,27 @@ export function StageScene() {
     }
   }, [lookingThrough]);
 
+  /** Whole scene as JSON (the same objects array the layout persists), so a
+   * shot can be authored by hand or by an LLM/agent and loaded back in. */
+  function exportScene() {
+    const blob = new Blob([JSON.stringify({ schema: SCENE_SCHEMA, objects }, null, 2)], { type: "application/json" });
+    downloadBlob(blob, `stage-scene-${Date.now()}.json`);
+  }
+
+  async function importScene(file: File) {
+    try {
+      const loaded = parseScene(JSON.parse(await file.text()));
+      nextId.current = Math.max(nextId.current, ...loaded.map((o) => o.id + 1));
+      setObjects(loaded);
+      setSelectedId(null);
+      setGizmoMode("translate");
+      setPlayheadTime(0);
+      setIsPlaying(false);
+    } catch (err) {
+      alert(`Couldn't load scene: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   function resetLayout() {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -1008,8 +1188,13 @@ export function StageScene() {
   }, [cameraObj?.id]);
 
   const selected = objects.find((o) => o.id === selectedId) ?? null;
-  const canDuplicate = selected?.kind === "box" || selected?.kind === "ball";
-  const canKeyframeSelection = selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "mannequin";
+  const canDuplicate = selected?.kind === "box" || selected?.kind === "ball" || selected?.kind === "purse";
+  const canKeyframeSelection =
+    selected?.kind === "box" ||
+    selected?.kind === "ball" ||
+    selected?.kind === "purse" ||
+    selected?.kind === "mannequin" ||
+    selected?.kind === "camera";
 
   // Refs attach during the commit that follows a selectedId change, so the
   // live Object3D isn't readable until an effect runs after that commit —
@@ -1036,7 +1221,7 @@ export function StageScene() {
     );
   }, [selectedId, effectiveActiveJoint]);
 
-  function addFromInventory(kind: "box" | "ball" | "mannequin") {
+  function addFromInventory(kind: "box" | "ball" | "purse" | "mannequin") {
     const id = nextId.current++;
     const base: SceneObject = {
       id,
@@ -1053,6 +1238,13 @@ export function StageScene() {
     } else if (kind === "ball") {
       base.position = [0, newSize, 2];
       base.size = newSize;
+    } else if (kind === "purse") {
+      // fixed handbag scale; the Size/L/B inputs are box-scale. Lifted onto
+      // the floor's top face (y=0.1) so the opening isn't partly buried.
+      base.position = [0, 0.1, 2];
+      base.size = PURSE_SIZE.height;
+      base.length = PURSE_SIZE.length;
+      base.breadth = PURSE_SIZE.breadth;
     }
     // mannequin stands at y=0 — its own geometry is already floor-relative,
     // and its rest pose defaults inside the Mannequin component
@@ -1253,8 +1445,12 @@ export function StageScene() {
         }}
       >
         <color attach="background" args={[BACKDROP_COLOR]} />
-        <PerspectiveCamera makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
+        <PerspectiveCamera ref={setOrbitCamera} makeDefault={!lookingThrough} position={[3.5, 2.2, 5]} fov={45} />
+        {/* Pinned to the orbit camera: left to follow the default camera, the
+            controls get rebuilt on the look-through swap and OrbitControls'
+            constructor re-aims the shot camera at the world origin. */}
         <OrbitControls
+          camera={orbitCamera ?? undefined}
           makeDefault
           enabled={!lookingThrough}
           target={[0, 1, 0]}
@@ -1308,6 +1504,7 @@ export function StageScene() {
             />
             <FlyController
               active={lookingThrough}
+              dragLookEnabled={dragLookEnabled}
               nodesRef={nodes}
               cameraIdRef={cameraIdRef}
               whipRef={whipRef}
@@ -1336,9 +1533,51 @@ export function StageScene() {
       </Canvas>
 
       {lookingThrough && (
-        <p className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.15em] text-fg-dim">
-          W A S D move · Q / E down / up · Shift boost · right-drag to look
-        </p>
+        <div aria-label="Camera view controls" className="absolute left-1/2 top-6 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-bg-panel py-1.5 pl-4 pr-2 text-[11px] text-fg-dim shadow-sm">
+            <span className="hidden whitespace-nowrap sm:inline">W A S D move</span>
+            <span className="hidden whitespace-nowrap sm:inline">{dragLookEnabled ? "Left-drag to look" : "F + left-drag to look"}</span>
+            <button
+              type="button"
+              aria-pressed={dragLookEnabled}
+              aria-label={`Drag to look ${dragLookEnabled ? "on" : "off"}`}
+              onClick={() => setDragLookEnabled((v) => !v)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 transition-colors ${
+                dragLookEnabled ? "border-accent bg-accent text-bg font-medium" : "border-border hover:border-accent hover:text-fg"
+              }`}
+            >
+              Drag to look {dragLookEnabled ? "on" : "off"}
+            </button>
+            <details className="group shrink-0">
+              <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-fg transition-colors hover:bg-border [&::-webkit-details-marker]:hidden">
+                Shortcuts <span aria-hidden="true" className="ml-1 inline-block transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="absolute right-0 top-full mt-2 max-h-[60vh] w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border bg-bg-panel p-4 text-xs leading-5 shadow-lg">
+                <p className="mb-3 text-fg">Hold a key to move. Release it to stop.</p>
+                {([
+                  ["Movement", [["W / S", "Forward / back"], ["A / D", "Strafe left / right"], ["Q / E", "Down / up"], ["Shift", "Speed boost"]]],
+                  ["Rotation", [["L / P", "Pan / yaw — left / right"], ["T / B", "Tilt / pitch — up / down"], [", / .", "Roll — left / right"]]],
+                  ["Lens", [["Z / X", "Zoom in / out"], ["I / O", "Dolly zoom in / out"]]],
+                ] as const).map(([heading, rows]) => (
+                  <section key={heading} className="mb-3">
+                    <h3 className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-fg-faint">{heading}</h3>
+                    <dl className="grid grid-cols-[5rem_1fr] items-baseline gap-x-3 gap-y-1">
+                      {rows.map(([keys, action]) => (
+                        <div key={keys} className="contents">
+                          <dt className="font-mono font-medium text-fg">{keys}</dt>
+                          <dd>{action}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+                <div className="border-t border-border pt-3">
+                  <p className="font-medium text-fg">Look around</p>
+                  <p>Hold <kbd className="font-mono text-fg">F</kbd> and left-drag, or right-drag.</p>
+                  <p className="mt-1">Turn on <span className="text-fg">Drag to look</span> for left-drag without holding a key. Turn it off to select objects again.</p>
+                </div>
+              </div>
+            </details>
+        </div>
       )}
 
       {/* Manipulation tools: transform mode, camera view + capture, reset */}
@@ -1403,6 +1642,14 @@ export function StageScene() {
             >
               {isRecording ? "● Stop recording" : "Record clip"}
             </button>
+            <button
+              onClick={recordTake}
+              disabled={isRecording}
+              title="Plays the timeline from 0 while recording and stops at the end"
+              className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg disabled:opacity-40"
+            >
+              Record take
+            </button>
           </div>
         )}
 
@@ -1431,6 +1678,28 @@ export function StageScene() {
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) setBackdrop({ kind: "image", url: URL.createObjectURL(file) });
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
+          <button
+            onClick={exportScene}
+            className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
+          >
+            Export scene
+          </button>
+          <label className="cursor-pointer rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg">
+            Import scene
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importScene(file);
                 e.target.value = "";
               }}
             />
@@ -1533,6 +1802,7 @@ export function StageScene() {
                 {([
                   ["box", "Box"],
                   ["ball", "Ball"],
+                  ["purse", "Purse"],
                   ["mannequin", "Mannequin"],
                 ] as const).map(([kind, label]) => (
                   <button

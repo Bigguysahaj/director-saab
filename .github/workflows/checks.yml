@@ -15,11 +15,15 @@ jobs:
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # always(), not failure(): a test that fails then passes on retry
+      # (flaky) leaves the job green, and its trace is the only evidence.
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-results
           path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
   # Image-output evals (Screen Test blocking/identity, character-sheet
   # grid/identity) over the stored golden fixtures in evals/fixtures. CPU
   # only, no API calls. See evals/README.md.
