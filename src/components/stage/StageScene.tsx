@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, ContactShadows, TransformControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -75,6 +75,34 @@ const DEFAULT_FOV = 50;
 // `keyframes`; v3 adds `castId` — all optional, but old saves are dropped
 // anyway per convention.
 const STORAGE_KEY = "director-stage-layout-v3";
+
+// Opt-in "+ Keypoints" toggle: when on, Capture photo also downloads the eval
+// keypoint JSON (evals/). Off by default so a normal capture is just the PNG.
+// Read through useSyncExternalStore (same approach as usePoseLibrary) since the
+// toggle is server-rendered DOM; falls back to memory if storage is blocked.
+const EXPORT_KEYPOINTS_KEY = "director-stage-export-keypoints";
+const EXPORT_KEYPOINTS_CHANGED = "director-stage-export-keypoints-changed";
+let exportKeypointsFallback = false;
+function subscribeExportKeypoints(notify: () => void) {
+  window.addEventListener(EXPORT_KEYPOINTS_CHANGED, notify);
+  return () => window.removeEventListener(EXPORT_KEYPOINTS_CHANGED, notify);
+}
+function readExportKeypoints(): boolean {
+  try {
+    return localStorage.getItem(EXPORT_KEYPOINTS_KEY) === "1";
+  } catch {
+    return exportKeypointsFallback;
+  }
+}
+function writeExportKeypoints(on: boolean) {
+  exportKeypointsFallback = on;
+  try {
+    localStorage.setItem(EXPORT_KEYPOINTS_KEY, on ? "1" : "0");
+  } catch {
+    // storage unavailable — the in-memory fallback carries it for this session
+  }
+  window.dispatchEvent(new Event(EXPORT_KEYPOINTS_CHANGED));
+}
 
 // Static layout to start from. Y on the box/ball props is each shape's own
 // half-height/radius so it sits flush on the floor.
@@ -786,6 +814,7 @@ export function StageScene() {
     if (backdrop.kind !== "image") return;
     return () => URL.revokeObjectURL(backdrop.url);
   }, [backdrop]);
+  const exportKeypoints = useSyncExternalStore(subscribeExportKeypoints, readExportKeypoints, () => false);
   const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
   // Mirrors holdRef for UI highlighting only — the physics itself never
   // reads this, so it doesn't need to update every frame.
@@ -825,7 +854,7 @@ export function StageScene() {
     const cam = cameraFovRef.current;
     const ts = Date.now();
     // Blocking ground truth for the Screen Test eval (evals/), saved beside the photo.
-    if (canvas && cam) {
+    if (exportKeypoints && canvas && cam) {
       const mannequins: StageMannequin[] = objects
         .filter((o) => o.kind === "mannequin")
         .map((o) => ({
@@ -1355,6 +1384,16 @@ export function StageScene() {
               className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:text-fg"
             >
               Capture photo
+            </button>
+            <button
+              onClick={() => writeExportKeypoints(!exportKeypoints)}
+              aria-pressed={exportKeypoints}
+              title="Also download the mannequins' joint keypoints (stage-photo-<ts>.json) with each photo, as ground truth for the Screen Test eval"
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                exportKeypoints ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+              }`}
+            >
+              + Keypoints
             </button>
             <button
               onClick={toggleRecording}
