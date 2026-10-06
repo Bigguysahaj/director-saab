@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python eval harness virtualenv (contains vendored JS from matplotlib).
+    "evals/.venv/**",
   ]),
 ]);
 

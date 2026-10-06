@@ -1,0 +1,33 @@
+{
+  "schema": "director-stage-keypoints/v1",
+  "source": "hand-annotated from images/stage_2026-09-25.jpg (real /stage capture stage-photo-1790343387306, the closest capture before the 2026-09-25 Screen Test). Approximate: joints hidden behind the other mannequin are estimated. Orange figure is in a seated pose (thighs pointing at the camera, so they project very short).",
+  "image_size": [1920, 939],
+  "units": "px",
+  "figures": [
+    {
+      "color": "#c65d3b",
+      "keypoints": {
+        "head": [939, 352], "nose": null,
+        "right_shoulder": [848, 418], "left_shoulder": [1032, 418],
+        "right_elbow": [835, 495], "left_elbow": [1042, 495],
+        "right_wrist": [822, 515], "left_wrist": [1052, 525],
+        "right_hip": [905, 570], "left_hip": [987, 568],
+        "right_knee": [908, 612], "left_knee": [990, 605],
+        "right_ankle": [907, 725], "left_ankle": [992, 725]
+      }
+    },
+    {
+      "color": "#3b6b5c",
+      "keypoints": {
+        "head": [870, 397], "nose": [905, 392],
+        "right_shoulder": [808, 440], "left_shoulder": [952, 440],
+        "right_elbow": [805, 520], "left_elbow": [1000, 505],
+        "right_wrist": [828, 540], "left_wrist": [1030, 535],
+        "right_hip": [855, 610], "left_hip": [905, 610],
+        "right_knee": [860, 732], "left_knee": [915, 735],
+        "right_ankle": [867, 845], "left_ankle": [922, 827]
+      }
+    }
+  ],
+  "contacts": []
+}

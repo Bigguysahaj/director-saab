@@ -20,3 +20,33 @@ jobs:
         with:
           name: playwright-results
           path: test-results/
+  # Image-output evals (Screen Test blocking/identity, character-sheet
+  # grid/identity) over the stored golden fixtures in evals/fixtures. CPU
+  # only, no API calls. See evals/README.md.
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: evals/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache eval model weights
+        uses: actions/cache@v4
+        with:
+          path: evals/.models
+          key: eval-models-${{ hashFiles('evals/models.json') }}
+      # opencv-contrib-python (pulled in by mediapipe) links against libGL.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends libgl1
+      - run: pip install -r evals/requirements.txt
+      - run: npm run eval
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: evals/.out/report.json

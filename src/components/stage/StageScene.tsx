@@ -19,8 +19,53 @@ import { Mannequin } from "./Mannequin";
 import { Timeline } from "./Timeline";
 import { CastPanel } from "./CastPanel";
 import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
+import { JOINTS } from "@/lib/poses/model";
+import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
 
 const BACKDROP_COLOR = "#e8e2d6";
+// Chroma green for keying the captured clip in an editor.
+const GREEN_SCREEN_COLOR = "#00b140";
+
+export type Backdrop = { kind: "plain" } | { kind: "green" } | { kind: "image"; url: string };
+
+/** Backdrop wall with a user-dropped image, scaled to cover the 12x8 wall
+ * (cropped, not stretched). Unlit so the plate reads as-is on camera. */
+function ImageBackdropWall({ url }: { url: string }) {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    let tex: THREE.Texture | null = null;
+    let cancelled = false;
+    new THREE.TextureLoader().load(url, (t) => {
+      if (cancelled) return t.dispose();
+      t.colorSpace = THREE.SRGBColorSpace;
+      const img = t.image as { width: number; height: number };
+      const wallAspect = 12 / 8;
+      const imgAspect = img.width / img.height;
+      if (imgAspect > wallAspect) {
+        t.repeat.set(wallAspect / imgAspect, 1);
+        t.offset.set((1 - t.repeat.x) / 2, 0);
+      } else {
+        t.repeat.set(1, imgAspect / wallAspect);
+        t.offset.set(0, (1 - t.repeat.y) / 2);
+      }
+      tex = t;
+      setTexture(t);
+    });
+    return () => {
+      cancelled = true;
+      tex?.dispose();
+    };
+  }, [url]);
+  // Mount only once loaded: adding a map to an already-compiled material
+  // doesn't recompile its shader, so it would render without the texture.
+  if (!texture) return null;
+  return (
+    <mesh position={[0, 4, -2.89]}>
+      <planeGeometry args={[12, 8]} />
+      <meshBasicMaterial key={texture.uuid} map={texture} toneMapped={false} />
+    </mesh>
+  );
+}
 const PROP_COLOR = "#2a2a28";
 const PALETTE = STAGE_PALETTE.map((c) => c.hex);
 const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
@@ -196,6 +241,7 @@ type SceneContentsProps = {
   activeJoint: JointKey | null;
   onSelectJoint: (joint: JointKey) => void;
   jointRef: (mannequinId: number, joint: JointKey, obj: THREE.Object3D | null) => void;
+  backdrop: Backdrop;
 };
 
 /** The room shell (lights, walls, floor) plus every scene object. Box/ball/
@@ -216,7 +262,11 @@ function SceneContents({
   activeJoint,
   onSelectJoint,
   jointRef,
+  backdrop,
 }: SceneContentsProps) {
+  // Green screen covers wall + floor (a cyc), so the whole set keys out.
+  // Wall is unlit (flat, even key); floor stays lit so contact shadows read.
+  const floorColor = backdrop.kind === "green" ? GREEN_SCREEN_COLOR : BACKDROP_COLOR;
   return (
     <>
       <hemisphereLight args={[BACKDROP_COLOR, "#3a352c", 0.8]} />
@@ -225,12 +275,17 @@ function SceneContents({
       {/* backdrop wall */}
       <mesh position={[0, 4, -3]} receiveShadow>
         <boxGeometry args={[12, 8, 0.2]} />
-        <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+        {backdrop.kind === "green" ? (
+          <meshBasicMaterial key="green" color={GREEN_SCREEN_COLOR} toneMapped={false} />
+        ) : (
+          <meshStandardMaterial key="lit" color={BACKDROP_COLOR} roughness={1} />
+        )}
       </mesh>
+      {backdrop.kind === "image" && <ImageBackdropWall url={backdrop.url} />}
       {/* floor */}
       <mesh position={[0, 0, 0]} receiveShadow>
         <boxGeometry args={[12, 0.2, 8]} />
-        <meshStandardMaterial color={BACKDROP_COLOR} roughness={1} />
+        <meshStandardMaterial color={floorColor} roughness={1} />
       </mesh>
 
       {objects.map((o) => {
@@ -725,6 +780,12 @@ export function StageScene() {
   const [isRecording, setIsRecording] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
+  const [backdrop, setBackdrop] = useState<Backdrop>({ kind: "plain" });
+  // Session-only: the object URL dies with the tab, so the image isn't persisted.
+  useEffect(() => {
+    if (backdrop.kind !== "image") return;
+    return () => URL.revokeObjectURL(backdrop.url);
+  }, [backdrop]);
   const [cameraMovesOpen, setCameraMovesOpen] = useState(false);
   // Mirrors holdRef for UI highlighting only — the physics itself never
   // reads this, so it doesn't need to update every frame.
@@ -760,8 +821,28 @@ export function StageScene() {
       setLookingThrough(true);
       await waitFrames(3);
     }
-    canvasEl.current?.toBlob((blob) => {
-      if (blob) downloadBlob(blob, `stage-photo-${Date.now()}.png`);
+    const canvas = canvasEl.current;
+    const cam = cameraFovRef.current;
+    const ts = Date.now();
+    // Blocking ground truth for the Screen Test eval (evals/), saved beside the photo.
+    if (canvas && cam) {
+      const mannequins: StageMannequin[] = objects
+        .filter((o) => o.kind === "mannequin")
+        .map((o) => ({
+          color: o.color ?? DEFAULT_MANNEQUIN_COLOR,
+          castId: o.castId ?? null,
+          joints: Object.fromEntries(
+            JOINTS.flatMap((j) => {
+              const node = jointNodes.current.get(`${o.id}:${j}`);
+              return node ? [[j, node]] : [];
+            })
+          ),
+        }));
+      const keypoints = projectStageKeypoints(cam, mannequins, [canvas.width, canvas.height]);
+      downloadBlob(new Blob([JSON.stringify(keypoints, null, 2)], { type: "application/json" }), `stage-photo-${ts}.json`);
+    }
+    canvas?.toBlob((blob) => {
+      if (blob) downloadBlob(blob, `stage-photo-${ts}.png`);
       if (!wasLookingThrough) setLookingThrough(false);
     }, "image/png");
   }
@@ -1166,6 +1247,7 @@ export function StageScene() {
           activeJoint={effectiveActiveJoint}
           onSelectJoint={setActiveJoint}
           jointRef={setJointRef}
+          backdrop={backdrop}
         />
 
         {selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && (
@@ -1284,6 +1366,37 @@ export function StageScene() {
             </button>
           </div>
         )}
+
+        <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1" aria-label="Backdrop">
+          {(["plain", "green"] as const).map((kind) => (
+            <button
+              key={kind}
+              onClick={() => setBackdrop({ kind })}
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                backdrop.kind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+              }`}
+            >
+              {kind === "plain" ? "Plain" : "Green screen"}
+            </button>
+          ))}
+          <label
+            className={`cursor-pointer rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+              backdrop.kind === "image" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+            }`}
+          >
+            Image…
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setBackdrop({ kind: "image", url: URL.createObjectURL(file) });
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
 
         <button
           onClick={resetLayout}

@@ -12,7 +12,10 @@
     "test:e2e": "playwright test",
     "test:e2e:camera": "node e2e/camera-view.e2e.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "eval": "sh evals/run.sh",
+    "eval:setup": "python3 -m venv evals/.venv && evals/.venv/bin/pip install -r evals/requirements.txt",
+    "eval:live": "evals/.venv/bin/python evals/live.py"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

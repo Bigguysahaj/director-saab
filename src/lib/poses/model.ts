@@ -16,14 +16,17 @@ export const DEFAULT_POSE: MannequinPose = {
   rightLeg: [0, 0, 0],
 };
 
+// Joint keys are viewer-side: `left*` sits at the rig's -X while the figure
+// faces +Z, i.e. on the figure's own RIGHT (see Mannequin.tsx). Keys stay as-is
+// so saved poses and packs keep working; labels use the figure's own side.
 export const JOINT_LABELS: Record<JointKey, string> = {
   spine: "Torso", head: "Head / neck",
-  leftArm: "Left shoulder", rightArm: "Right shoulder",
-  leftElbow: "Left elbow", rightElbow: "Right elbow",
-  leftHand: "Left wrist / hand", rightHand: "Right wrist / hand",
-  leftLeg: "Left hip", rightLeg: "Right hip",
-  leftKnee: "Left knee", rightKnee: "Right knee",
-  leftFoot: "Left ankle / foot", rightFoot: "Right ankle / foot",
+  rightArm: "Left shoulder", leftArm: "Right shoulder",
+  rightElbow: "Left elbow", leftElbow: "Right elbow",
+  rightHand: "Left wrist / hand", leftHand: "Right wrist / hand",
+  rightLeg: "Left hip", leftLeg: "Right hip",
+  rightKnee: "Left knee", leftKnee: "Right knee",
+  rightFoot: "Left ankle / foot", leftFoot: "Right ankle / foot",
 };
 
 export const JOINTS = Object.keys(DEFAULT_POSE) as JointKey[];
