@@ -35,6 +35,6 @@ export function PosePanel({ pose, joint, characterId, onSelect, onChange }: {
       <button className={button} onClick={() => onChange({ ...resolved, [joint]: [...DEFAULT_POSE[joint]] })}>Reset joint</button>
       <button className={button} onClick={() => onChange(resolvePose())}>Reset pose</button>
     </div>
-    <p className="mt-3 text-xs text-fg-dim">Poses save automatically. Joint poses are static across the timeline. Use Move to position a seated figure.</p>
+    <p className="mt-3 text-xs text-fg-dim">Poses save automatically. Add key stores the pose too; once a figure has pose keys, edits key the pose at the playhead. Use Move to position a seated figure.</p>
   </section>;
 }
