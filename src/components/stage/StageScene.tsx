@@ -22,6 +22,7 @@ import { CastPanel } from "./CastPanel";
 import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
 import { JOINTS } from "@/lib/poses/model";
 import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
+import { fitAspect, pickRecorderMimeType } from "@/lib/videoReference";
 
 const BACKDROP_COLOR = "#e8e2d6";
 // Chroma green for keying the captured clip in an editor.
@@ -924,6 +925,21 @@ function waitFrames(n: number): Promise<void> {
   });
 }
 
+// Vertical Shorts frame; Seedance renders 9:16 at 480×854 / 720×1280.
+const FRAME_ASPECT = 9 / 16;
+
+/** Waits (up to ~1 s) for the canvas's pixel buffer to reach `aspect`. The
+ * renderer resizes from a ResizeObserver, so the first frames after the
+ * frame lock applies can still be the old shape. */
+async function waitForCanvasAspect(canvas: HTMLCanvasElement, aspect: number) {
+  for (let i = 0; i < 60; i++) {
+    if (canvas.height > 0 && Math.abs(canvas.width / canvas.height / aspect - 1) < 0.005) break;
+    await waitFrames(1);
+  }
+  // A couple more so the resized buffer has a rendered frame in it.
+  await waitFrames(2);
+}
+
 export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -935,6 +951,11 @@ export function StageScene() {
   const [lookingThrough, setLookingThrough] = useState(false);
   const [dragLookEnabled, setDragLookEnabled] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  // Letterboxes camera view to a centred 9:16 frame and sizes the canvas to
+  // it, so photos and recordings come out as real 9:16 pixels.
+  const [frameLock, setFrameLock] = useState(false);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
+  const [recorderNotice, setRecorderNotice] = useState<string | null>(null);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
   const [orbitCamera, setOrbitCamera] = useState<THREE.PerspectiveCamera | null>(null);
@@ -955,6 +976,16 @@ export function StageScene() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
+  const stageEl = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = stageEl.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
   const cameraFovRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -982,6 +1013,7 @@ export function StageScene() {
       setLookingThrough(true);
       await waitFrames(3);
     }
+    if (frameLock) await waitForCanvasAspect(canvasEl.current, FRAME_ASPECT);
     const canvas = canvasEl.current;
     const cam = cameraFovRef.current;
     const ts = Date.now();
@@ -1046,9 +1078,10 @@ export function StageScene() {
     autoEnteredCameraView.current = !wasLookingThrough;
     const canvas = canvasEl.current;
     if (!canvas) return;
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : "video/webm";
+    if (frameLock) await waitForCanvasAspect(canvas, FRAME_ASPECT);
+    // Seedance takes MP4/MOV only; WebM is the fallback for browsers whose
+    // MediaRecorder can't write MP4 (we don't bundle a transcoder).
+    const { mimeType, ext, seedanceReady } = pickRecorderMimeType((t) => MediaRecorder.isTypeSupported(t));
     const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType });
     recordedChunks.current = [];
     recorder.ondataavailable = (e) => {
@@ -1058,7 +1091,8 @@ export function StageScene() {
       // Every stop path (button, take end, pause) lands here, so a take cut
       // short can't leave the flag set and kill the next manual recording.
       recordingTake.current = false;
-      downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.webm`);
+      downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.${ext}`);
+      setRecorderNotice(seedanceReady ? null : "Saved as WebM: convert to MP4 before sending to Seedance.");
       setIsRecording(false);
       if (autoEnteredCameraView.current) setLookingThrough(false);
     };
@@ -1423,13 +1457,21 @@ export function StageScene() {
     );
   }
 
+  const frame = frameLock && lookingThrough && stageSize ? fitAspect(stageSize.width, stageSize.height, FRAME_ASPECT) : null;
+
   const keyframeTimes = selected?.keyframes?.map((k) => k.time) ?? [];
   const hasKeyframeAtPlayhead = !!selected?.keyframes?.some((k) => Math.abs(k.time - playheadTime) < KEYFRAME_EPSILON);
   const selectedDisplay =
     selected && (selected.keyframes?.length ? interpolateTransform(selected.keyframes, playheadTime) : { position: selected.position, rotation: selected.rotation });
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={stageEl} className="relative h-full w-full">
+      {frame && <div aria-hidden="true" className="absolute inset-0 bg-black" />}
+      <div
+        data-testid="stage-frame"
+        className="absolute"
+        style={frame ? { left: frame.x, top: frame.y, width: frame.width, height: frame.height } : { inset: 0 }}
+      >
       <Canvas
         shadows
         dpr={[1, 2]}
@@ -1531,6 +1573,16 @@ export function StageScene() {
 
         <ContactShadows position={[0, 0.11, 0]} opacity={0.4} scale={10} blur={2} far={4} />
       </Canvas>
+      </div>
+
+      {recorderNotice && (
+        <div role="status" className="absolute bottom-20 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border border-warn bg-bg-panel py-1.5 pl-4 pr-2 text-[11px] text-warn">
+          {recorderNotice}
+          <button type="button" onClick={() => setRecorderNotice(null)} className="rounded-full px-2 text-fg-dim hover:text-fg" aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
 
       {lookingThrough && (
         <div aria-label="Camera view controls" className="absolute left-1/2 top-6 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-border bg-bg-panel py-1.5 pl-4 pr-2 text-[11px] text-fg-dim shadow-sm">
@@ -1617,6 +1669,16 @@ export function StageScene() {
               }`}
             >
               {lookingThrough ? "Exit camera view" : "Camera view"}
+            </button>
+            <button
+              onClick={() => setFrameLock((v) => !v)}
+              aria-pressed={frameLock}
+              title="Lock camera view, photos and recordings to a vertical 9:16 frame"
+              className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                frameLock ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+              }`}
+            >
+              9:16
             </button>
             <button
               onClick={capturePhoto}

@@ -19,7 +19,7 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   await expect(stop).toBeVisible(STARTS);
   const takeClip = page.waitForEvent("download");
   await stop.click();
-  expect((await takeClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.webm$/);
+  expect((await takeClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.(mp4|webm)$/);
   // Stopping the recording doesn't stop the take's playback; the bug only
   // bites once the timeline (TIMELINE_DURATION = 8s) has finished.
   await page.waitForTimeout(9000);
@@ -31,6 +31,6 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   await expect(stop).toBeVisible();
   const manualClip = page.waitForEvent("download");
   await stop.click();
-  expect((await manualClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.webm$/);
+  expect((await manualClip).suggestedFilename()).toMatch(/^stage-clip-\d+\.(mp4|webm)$/);
   expect(errors).toEqual([]);
 });

@@ -10,6 +10,7 @@ import { PromptStage } from "./PromptStage";
 import { ControlRail } from "./ControlRail";
 import { Viewer } from "./Viewer";
 import { Dailies } from "./Dailies";
+import { SendTake, type SubmittedTake } from "./SendTake";
 
 function pickDefault<T>(options: T[], preferred?: T): T | undefined {
   if (preferred !== undefined && options.includes(preferred)) return preferred;
@@ -30,6 +31,10 @@ export function Studio() {
   const [seed, setSeed] = useState<number | null>(null);
   const [reference, setReference] = useState<string | null>(null);
   const [syncedModelId, setSyncedModelId] = useState<string>();
+  // What the in-flight job was submitted with: the Action button and the
+  // Send-take panel each have their own prompt/model, so Dailies records
+  // whichever one actually went out.
+  const [submitted, setSubmitted] = useState<SubmittedTake | null>(null);
 
   useEffect(() => {
     // localStorage is only readable client-side; reading it here (rather
@@ -60,17 +65,17 @@ export function Studio() {
   }
 
   const { state, submit } = useGeneration((settled: GenerationState) => {
-    if (!settled.jobId) return;
+    if (!settled.jobId || !submitted) return;
     persist(
       upsertTake(loadTakes(), {
         id: settled.jobId,
-        prompt,
-        model: model?.id ?? "",
-        modelLabel: model?.label ?? "",
+        prompt: submitted.prompt,
+        model: submitted.model.id,
+        modelLabel: submitted.model.label,
         createdAt: Date.now(),
-        duration,
-        resolution,
-        aspectRatio,
+        duration: submitted.duration,
+        resolution: submitted.resolution,
+        aspectRatio: submitted.aspectRatio,
         status: settled.status === "idle" ? "pending" : settled.status,
         videoUrl: settled.videoUrl ?? undefined,
         cost: settled.cost ?? undefined,
@@ -99,6 +104,14 @@ export function Studio() {
           : undefined,
     };
 
+    setSubmitted({ prompt: body.prompt, model, duration, resolution, aspectRatio });
+    await submit(body);
+  }
+
+  async function sendTake(body: GenerateRequest, take: SubmittedTake) {
+    if (rolling) return;
+    setPendingId(null);
+    setSubmitted(take);
     await submit(body);
   }
 
@@ -109,7 +122,7 @@ export function Studio() {
 
   const viewerAspect = pendingId
     ? takes.find((t) => t.id === pendingId)?.aspectRatio ?? aspectRatio ?? "16:9"
-    : aspectRatio ?? "16:9";
+    : (state.status !== "idle" ? submitted?.aspectRatio : undefined) ?? aspectRatio ?? "16:9";
   const viewerStatus = pendingId
     ? takes.find((t) => t.id === pendingId)?.status ?? "idle"
     : state.status;
@@ -179,6 +192,8 @@ export function Studio() {
           />
           {rolling ? "Rolling…" : "Action"}
         </button>
+
+        <SendTake models={models.filter((m) => m.supports_video_reference)} disabled={rolling} onSubmit={sendTake} />
       </main>
 
       <Dailies

@@ -11,6 +11,13 @@ export type VideoModel = {
   supports_frame_images: boolean;
   supports_input_references: boolean;
   price_per_second?: number;
+  // Accepts a video_url input reference (Seedance 2.x). Drives which models
+  // the "Send a stage take" flow offers.
+  supports_video_reference: boolean;
+  // Per-token USD rates for token-priced models (Seedance): the plain rate,
+  // and the one that applies once a video reference is attached.
+  token_rate?: number;
+  video_input_token_rate?: number;
 };
 
 export type GenerationStatus =
@@ -42,10 +49,11 @@ export type FrameImage = {
   frame_type: "first_frame" | "last_frame";
 };
 
-export type InputReference = {
-  type: "image_url";
-  image_url: { url: string };
-};
+// Seedance 2.x honours all three; other models take images only.
+export type InputReference =
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } }
+  | { type: "audio_url"; audio_url: { url: string } };
 
 export type GenerateRequest = {
   model: string;
