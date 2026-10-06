@@ -116,6 +116,39 @@ function derivePricePerSecond(raw: Record<string, unknown>): number | undefined 
   return min;
 }
 
+/**
+ * Seedance prices per token, with a separate (cheaper) rate once a video
+ * reference is attached; derivePricePerSecond ignores both. The SKU naming
+ * isn't documented, so: any "token" key, "video" in it marks the
+ * video-input rate, and a "million"-denominated key (or a value too large
+ * to be per-token) is scaled down to USD per token.
+ */
+function deriveTokenRates(raw: Record<string, unknown>): { token_rate?: number; video_input_token_rate?: number } {
+  const skus = raw.pricing_skus as Record<string, string> | undefined;
+  if (!skus || typeof skus !== "object") return {};
+  const out: { token_rate?: number; video_input_token_rate?: number } = {};
+  for (const [key, value] of Object.entries(skus)) {
+    if (!key.includes("token")) continue;
+    let n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (key.includes("million") || n >= 0.01) n /= 1_000_000;
+    const field = key.includes("video") ? "video_input_token_rate" : "token_rate";
+    out[field] = Math.min(out[field] ?? Infinity, n);
+  }
+  return out;
+}
+
+// Research (OpenRouter openapi, 2026-10) says Seedance 2.x takes video and
+// audio refs and 1.5 doesn't. Prefer an explicit catalog list when there is
+// one; otherwise fall back to that.
+function supportsVideoReference(id: string, raw: Record<string, unknown>): boolean {
+  for (const key of ["supported_input_reference_types", "input_reference_types", "supported_input_modalities"]) {
+    const val = raw[key];
+    if (Array.isArray(val)) return val.some((t) => String(t).includes("video"));
+  }
+  return /^bytedance\/seedance-2/.test(id);
+}
+
 /** Tolerates minor field-naming drift in OpenRouter's live catalog response. */
 export function normalizeModel(raw: Record<string, unknown>): VideoModel {
   const id = String(raw.id ?? raw.model ?? "");
@@ -142,6 +175,8 @@ export function normalizeModel(raw: Record<string, unknown>): VideoModel {
       typeof raw.price_per_second === "number"
         ? raw.price_per_second
         : derivePricePerSecond(raw),
+    supports_video_reference: supportsVideoReference(id, raw),
+    ...deriveTokenRates(raw),
   };
 }
 
@@ -159,6 +194,7 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: true,
     price_per_second: 0.1028,
+    supports_video_reference: true,
   },
   {
     id: "bytedance/seedance-2.0-mini",
@@ -171,6 +207,10 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: true,
     price_per_second: 0.01345,
+    supports_video_reference: true,
+    // OpenRouter catalog, 2026-10-07 (USD per token).
+    token_rate: 0.0000035,
+    video_input_token_rate: 0.0000021,
   },
   {
     id: "bytedance/seedance-2.0-fast",
@@ -183,6 +223,7 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: false,
     price_per_second: 0.02,
+    supports_video_reference: true,
   },
   {
     id: "google/veo-3.1",
@@ -195,6 +236,7 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: false,
     price_per_second: 0.5,
+    supports_video_reference: false,
   },
   {
     id: "google/veo-3.1-lite",
@@ -207,6 +249,7 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: false,
     price_per_second: 0.2,
+    supports_video_reference: false,
   },
   {
     id: "minimax/hailuo-3",
@@ -219,6 +262,7 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: true,
     price_per_second: 0.15,
+    supports_video_reference: false,
   },
   {
     id: "alibaba/wan-2.7",
@@ -231,5 +275,6 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_frame_images: true,
     supports_input_references: true,
     price_per_second: 0.08,
+    supports_video_reference: false,
   },
 ];
