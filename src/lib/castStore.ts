@@ -20,6 +20,9 @@ export type StoredCastMember = {
   photo: string | null; // filename within the member's folder, e.g. "photo.png"
   shots: Record<string, StoredShot>; // shotId -> filename + cost
   stageColor?: string | null; // hex of the /stage mannequin this member is currently assigned to, if any
+  // Ready-made sheets added whole (no cropping) and sent as take references.
+  sheet?: string | null;
+  closeup?: string | null;
 };
 
 function castDir(projectId: string): string {
@@ -105,6 +108,8 @@ export async function updateMember(
     photoDataUrl?: string;
     shots?: Record<string, { image: string; cost: number }>;
     stageColor?: string | null;
+    sheetDataUrl?: string;
+    closeupDataUrl?: string;
   }
 ): Promise<StoredCastMember> {
   const roster = await readRoster(projectId);
@@ -144,6 +149,14 @@ export async function updateMember(
 
   if (patch.stageColor !== undefined) member.stageColor = patch.stageColor;
 
+  for (const key of ["sheet", "closeup"] as const) {
+    const dataUrl = patch[`${key}DataUrl`];
+    if (dataUrl === undefined) continue;
+    const old = member[key];
+    member[key] = await saveMemberImage(projectId, id, key, dataUrl);
+    if (old && old !== member[key]) await rm(path.join(memberDir(projectId, id), old), { force: true });
+  }
+
   roster[idx] = member;
   await writeRoster(projectId, roster);
   return member;
@@ -174,5 +187,7 @@ export function toClientMember(projectId: string, m: StoredCastMember) {
       ])
     ),
     stageColor: m.stageColor ?? null,
+    sheet: m.sheet ? file(m.sheet) : "",
+    closeup: m.closeup ? file(m.closeup) : "",
   };
 }

@@ -2,19 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CHARACTER_SHEET_COST, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
-import { createMember, deleteMember, loadCast, updateMember, type CastMember, type CastMemberShot } from "@/lib/cast";
+import { blobToDataUrl, createMember, deleteMember, loadCast, updateMember, type CastMember, type CastMemberShot } from "@/lib/cast";
 import { colorLabel } from "@/lib/stageColors";
 import type { ScreenTestCastRef } from "@/lib/screenTest";
 import type { ImageModel } from "@/lib/types";
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read blob"));
-    reader.readAsDataURL(blob);
-  });
-}
 
 function fileToDataUrl(file: File): Promise<string> {
   return blobToDataUrl(file);

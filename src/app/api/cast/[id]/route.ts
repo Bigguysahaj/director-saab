@@ -13,6 +13,8 @@ export async function PATCH(
       photo?: string; // data URL
       shots?: Record<string, { image: string; cost: number }>;
       stageColor?: string | null;
+      sheet?: string; // data URL
+      closeup?: string; // data URL
     };
 
     try {
@@ -21,6 +23,8 @@ export async function PATCH(
         photoDataUrl: body.photo,
         shots: body.shots,
         stageColor: body.stageColor,
+        sheetDataUrl: body.sheet,
+        closeupDataUrl: body.closeup,
       });
       return NextResponse.json(toClientMember(projectId, member));
     } catch (err) {
