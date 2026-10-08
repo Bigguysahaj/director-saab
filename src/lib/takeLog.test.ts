@@ -93,6 +93,39 @@ describe("takeLog", () => {
     expect((await readFile(path.join(takeDir("job-done"), "output.mp4"))).toString()).toBe("video-out");
   });
 
+  it("downloads once when two completed polls arrive together", async () => {
+    await logSubmittedTake({ id: "job-race", request });
+    // Slow download, so both polls are past the "file exists?" check before it lands.
+    const fetchOutput = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      return new Response("video-out");
+    });
+
+    await Promise.all([
+      recordTakeResult("job-race", { status: "completed" }, fetchOutput),
+      recordTakeResult("job-race", { status: "completed" }, fetchOutput),
+    ]);
+
+    expect(fetchOutput).toHaveBeenCalledTimes(1);
+    expect((await readTake("job-race")).output).toBe("output.mp4");
+    expect((await readFile(path.join(takeDir("job-race"), "output.mp4"))).toString()).toBe("video-out");
+    // Written via a temp file; nothing half-written is left behind.
+    expect((await readdir(takeDir("job-race"))).filter((f) => f.includes("tmp"))).toEqual([]);
+  });
+
+  it("leaves no output after a failed download, and the next poll retries", async () => {
+    await logSubmittedTake({ id: "job-retry", request });
+    const broken = vi.fn(async () => {
+      throw new Error("network");
+    });
+
+    await expect(recordTakeResult("job-retry", { status: "completed" }, broken)).rejects.toThrow("network");
+    expect((await readdir(takeDir("job-retry"))).filter((f) => f.includes("output"))).toEqual([]);
+
+    await recordTakeResult("job-retry", { status: "completed" }, async () => new Response("video-out"));
+    expect((await readTake("job-retry")).output).toBe("output.mp4");
+  });
+
   it("records a failed take with its error and no output", async () => {
     await logSubmittedTake({ id: "job-fail", request });
     const fetchOutput = vi.fn();
