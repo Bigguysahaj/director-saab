@@ -232,7 +232,7 @@ export function Studio() {
           {rolling ? "Rolling…" : "Action"}
         </button>
 
-        <SendTake models={models.filter((m) => m.supports_video_reference)} disabled={rolling} onSubmit={sendTake} />
+        <SendTake key={projectId} models={models.filter((m) => m.supports_video_reference)} disabled={rolling} onSubmit={sendTake} />
       </main>
 
       <Dailies

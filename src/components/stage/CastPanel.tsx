@@ -185,10 +185,16 @@ function readDataUrl(file: File): Promise<string> {
   });
 }
 
+// The types castStore saves under their real extension (and Seedance takes).
+const SHEET_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
 /** Click-or-drop image picker; the image is kept whole as a data URL. */
 function SheetDrop({ label, value, onChange }: { label: string; value: string; onChange: (dataUrl: string) => void }) {
+  const [error, setError] = useState(false);
   const take = (file?: File) => {
-    if (file?.type.startsWith("image/")) readDataUrl(file).then(onChange);
+    if (!file) return;
+    setError(!SHEET_TYPES.includes(file.type));
+    if (SHEET_TYPES.includes(file.type)) readDataUrl(file).then(onChange);
   };
   return (
     <label
@@ -205,8 +211,11 @@ function SheetDrop({ label, value, onChange }: { label: string; value: string; o
       ) : (
         <div className="h-10 w-10 shrink-0 rounded border border-border" />
       )}
-      <span className="text-[10px] uppercase tracking-[0.15em] text-fg-dim">{label}</span>
-      <input type="file" accept="image/*" aria-label={label} className="hidden" onChange={(e) => take(e.target.files?.[0])} />
+      <span className="text-[10px] uppercase tracking-[0.15em] text-fg-dim">
+        {label}
+        {error && <span role="alert" className="block normal-case tracking-normal text-warn">PNG, JPEG or WebP only</span>}
+      </span>
+      <input type="file" accept={SHEET_TYPES.join(",")} aria-label={label} className="hidden" onChange={(e) => take(e.target.files?.[0])} />
     </label>
   );
 }
