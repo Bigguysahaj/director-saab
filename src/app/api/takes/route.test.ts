@@ -12,6 +12,7 @@ vi.mock("@/lib/openrouter", () => ({
 
 import { createVideoJob } from "@/lib/openrouter";
 import * as takeLog from "@/lib/takeLog";
+import { createProject, setActiveProject } from "@/lib/projectStore";
 import { POST as generate } from "../generate/route";
 import { PATCH as patchTake } from "./[id]/route";
 
@@ -42,6 +43,24 @@ describe("/api/generate take logging", () => {
     expect(vi.mocked(createVideoJob).mock.calls[0][0]).toEqual({ model: "m", prompt: "a dog" });
     const take = await takeLog.readTake("job-1");
     expect(take).toMatchObject({ id: "job-1", prompt: "a dog", stage: "stage.json" });
+  });
+
+  it("logs the project the take was sent from, without sending it to OpenRouter", async () => {
+    await createProject("Gini-first-vid");
+    await setActiveProject("default");
+
+    await generate(req("http://x/api/generate", "POST", { model: "m", prompt: "a dog", project: "gini-first-vid" }));
+
+    expect(vi.mocked(createVideoJob).mock.calls[0][0]).toEqual({ model: "m", prompt: "a dog" });
+    expect((await takeLog.readTake("job-1")).project).toBe("gini-first-vid");
+  });
+
+  it("falls back to the active project when none is named", async () => {
+    await createProject("Gini-first-vid");
+
+    await generate(req("http://x/api/generate", "POST", { model: "m", prompt: "a dog" }));
+
+    expect((await takeLog.readTake("job-1")).project).toBe("gini-first-vid");
   });
 
   it("still returns 202 when the log write fails", async () => {

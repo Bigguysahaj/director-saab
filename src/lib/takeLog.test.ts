@@ -41,6 +41,11 @@ const request: GenerateRequest = {
 const stage = { schema: "director-stage-scene/v1", objects: [{ id: 1, kind: "box", position: [0, 0, 0], rotation: [0, 0, 0] }] };
 
 describe("takeLog", () => {
+  it("records which project the take was sent from", async () => {
+    await logSubmittedTake({ id: "job-p", request, project: "gini-first-vid" });
+    expect((await readTake("job-p")).project).toBe("gini-first-vid");
+  });
+
   it("logs a submitted take with settings, pending status and media as files", async () => {
     await logSubmittedTake({ id: "job-1", request });
 

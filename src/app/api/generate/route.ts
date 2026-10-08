@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createVideoJob, isConfigured } from "@/lib/openrouter";
+import { resolveProjectId } from "@/lib/projectStore";
 import { logSubmittedTake } from "@/lib/takeLog";
-import type { GenerateRequest } from "@/lib/types";
+import type { GenerateTakeRequest } from "@/lib/types";
 
 export async function POST(req: Request) {
   if (!isConfigured()) {
@@ -11,9 +12,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // `stage` is the /stage spec the take was recorded from: it goes into the
-  // take log, never to OpenRouter.
-  const { stage, ...body } = (await req.json()) as GenerateRequest & { stage?: unknown };
+  // `stage` (the /stage spec the take was recorded from) and `project` go
+  // into the take log, never to OpenRouter.
+  const { stage, project, ...body } = (await req.json()) as GenerateTakeRequest;
   if (!body.model || !body.prompt?.trim()) {
     return NextResponse.json(
       { error: "model and prompt are required" },
@@ -33,7 +34,9 @@ export async function POST(req: Request) {
 
   // The job is already paid for, so a log failure mustn't fail the request.
   try {
-    await logSubmittedTake({ id: job.id, request: body, stage });
+    // An unknown project still gets the take logged, just without one.
+    const projectId = await resolveProjectId(project ?? null).catch(() => null);
+    await logSubmittedTake({ id: job.id, request: body, stage, project: projectId });
   } catch (err) {
     console.error(`Couldn't log take ${job.id}:`, err);
   }

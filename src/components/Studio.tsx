@@ -138,14 +138,14 @@ export function Studio() {
     };
 
     setSubmitted({ prompt: body.prompt, model, duration, resolution, aspectRatio, projectId });
-    await submit(body);
+    await submit({ ...body, project: projectId });
   }
 
   async function sendTake(body: GenerateTakeRequest, take: SubmittedTake) {
     if (rolling || !projectId) return;
     setPendingId(null);
     setSubmitted({ ...take, projectId });
-    await submit(body);
+    await submit({ ...body, project: projectId });
   }
 
   function reopenTake(take: Take) {

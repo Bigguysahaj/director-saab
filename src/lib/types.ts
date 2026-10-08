@@ -69,7 +69,8 @@ export type GenerateRequest = {
 
 // What the Studio posts to /api/generate: the OpenRouter request plus the
 // /stage spec a take was recorded from, which the server logs and strips.
-export type GenerateTakeRequest = GenerateRequest & { stage?: unknown };
+// `stage` and `project` are for the take log only; /api/generate strips both.
+export type GenerateTakeRequest = GenerateRequest & { stage?: unknown; project?: string };
 
 export type ImageGenerateRequest = {
   model: string;

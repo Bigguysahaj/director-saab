@@ -16,6 +16,7 @@ type LoggedReference = { type: string; file: string };
 
 export type LoggedTake = {
   id: string;
+  project: string | null; // the project the take was sent from
   createdAt: number;
   model: string;
   prompt: string;
@@ -70,10 +71,12 @@ export async function logSubmittedTake({
   id,
   request,
   stage,
+  project = null,
 }: {
   id: string;
   request: GenerateRequest;
   stage?: unknown;
+  project?: string | null;
 }): Promise<void> {
   const dir = takeDir(id);
   await mkdir(dir, { recursive: true });
@@ -93,6 +96,7 @@ export async function logSubmittedTake({
 
   const take: LoggedTake = {
     id,
+    project,
     createdAt: Date.now(),
     model: request.model,
     prompt: request.prompt,
