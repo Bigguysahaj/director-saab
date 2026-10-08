@@ -23,6 +23,8 @@ export default defineConfig({
     command: "npm run dev -- --hostname localhost --port 3100",
     url: "http://localhost:3100/stage",
     reuseExistingServer: !process.env.CI,
+    // Keep e2e projects and cast out of the real .data/.
+    env: { DIRECTOR_DATA_DIR: ".data-e2e" },
     timeout: 120_000,
   },
 });

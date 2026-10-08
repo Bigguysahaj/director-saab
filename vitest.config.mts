@@ -1,8 +1,13 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // Mirrors tsconfig "paths" so route handlers can be imported in tests.
+    alias: { "@": path.resolve(import.meta.dirname, "src") },
+  },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],

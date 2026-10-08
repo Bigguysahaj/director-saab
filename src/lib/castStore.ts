@@ -1,9 +1,11 @@
 import "server-only";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { projectDir } from "./projectStore";
 
 /**
- * Cast persistence on disk under .data/cast/ (gitignored), not the browser —
+ * Cast persistence on disk under .data/projects/<project>/cast/ (gitignored;
+ * see projectStore.ts), not the browser —
  * reference photos and generated character-sheet shots are real image
  * files, not something to keep re-encoding into localStorage/IndexedDB.
  * roster.json holds metadata (name, filenames, per-shot cost); each
@@ -20,16 +22,29 @@ export type StoredCastMember = {
   stageColor?: string | null; // hex of the /stage mannequin this member is currently assigned to, if any
 };
 
-const DATA_DIR = path.join(process.cwd(), ".data", "cast");
-const ROSTER_PATH = path.join(DATA_DIR, "roster.json");
-
-function memberDir(id: string): string {
-  return path.join(DATA_DIR, id);
+function castDir(projectId: string): string {
+  return path.join(projectDir(projectId), "cast");
 }
 
-export async function readRoster(): Promise<StoredCastMember[]> {
+function rosterPath(projectId: string): string {
+  return path.join(castDir(projectId), "roster.json");
+}
+
+// Member ids and filenames end up in paths, and both can arrive from a URL.
+const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function safeSegment(kind: string, value: string): string {
+  if (!SAFE_SEGMENT.test(value) || value.includes("..")) throw new Error(`Invalid ${kind}: ${value}`);
+  return value;
+}
+
+function memberDir(projectId: string, id: string): string {
+  return path.join(castDir(projectId), safeSegment("cast member id", id));
+}
+
+export async function readRoster(projectId: string): Promise<StoredCastMember[]> {
   try {
-    const raw = await readFile(ROSTER_PATH, "utf-8");
+    const raw = await readFile(rosterPath(projectId), "utf-8");
     return JSON.parse(raw) as StoredCastMember[];
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
@@ -37,9 +52,9 @@ export async function readRoster(): Promise<StoredCastMember[]> {
   }
 }
 
-async function writeRoster(roster: StoredCastMember[]): Promise<void> {
-  await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(ROSTER_PATH, JSON.stringify(roster, null, 2));
+async function writeRoster(projectId: string, roster: StoredCastMember[]): Promise<void> {
+  await mkdir(castDir(projectId), { recursive: true });
+  await writeFile(rosterPath(projectId), JSON.stringify(roster, null, 2));
 }
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -56,16 +71,17 @@ function parseDataUrl(dataUrl: string): { buffer: Buffer; ext: string } {
   return { buffer: Buffer.from(base64, "base64"), ext: EXT_BY_MIME[mime] ?? "jpg" };
 }
 
-async function saveMemberImage(id: string, baseName: string, dataUrl: string): Promise<string> {
+async function saveMemberImage(projectId: string, id: string, baseName: string, dataUrl: string): Promise<string> {
   const { buffer, ext } = parseDataUrl(dataUrl);
-  await mkdir(memberDir(id), { recursive: true });
-  const filename = `${baseName}.${ext}`;
-  await writeFile(path.join(memberDir(id), filename), buffer);
+  const dir = memberDir(projectId, id);
+  await mkdir(dir, { recursive: true });
+  const filename = safeSegment("filename", `${baseName}.${ext}`);
+  await writeFile(path.join(dir, filename), buffer);
   return filename;
 }
 
-export async function createMember(name: string): Promise<StoredCastMember> {
-  const roster = await readRoster();
+export async function createMember(projectId: string, name: string): Promise<StoredCastMember> {
+  const roster = await readRoster(projectId);
   const member: StoredCastMember = {
     id: `cast-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
     name,
@@ -73,7 +89,7 @@ export async function createMember(name: string): Promise<StoredCastMember> {
     shots: {},
     stageColor: null,
   };
-  await writeRoster([...roster, member]);
+  await writeRoster(projectId, [...roster, member]);
   return member;
 }
 
@@ -82,6 +98,7 @@ export async function createMember(name: string): Promise<StoredCastMember> {
  * generated from the old photo, so they'd no longer match.
  */
 export async function updateMember(
+  projectId: string,
   id: string,
   patch: {
     name?: string;
@@ -90,7 +107,7 @@ export async function updateMember(
     stageColor?: string | null;
   }
 ): Promise<StoredCastMember> {
-  const roster = await readRoster();
+  const roster = await readRoster(projectId);
   const idx = roster.findIndex((m) => m.id === id);
   if (idx === -1) throw new Error(`Cast member ${id} not found`);
   const member = { ...roster[idx] };
@@ -99,19 +116,19 @@ export async function updateMember(
 
   if (patch.photoDataUrl !== undefined) {
     const oldPhoto = member.photo;
-    member.photo = await saveMemberImage(id, "photo", patch.photoDataUrl);
+    member.photo = await saveMemberImage(projectId, id, "photo", patch.photoDataUrl);
     // A re-upload with a different extension (png -> jpg, say) writes a new
     // filename rather than overwriting the old one — clean it up so it
     // doesn't just sit there unreferenced.
     if (oldPhoto && oldPhoto !== member.photo) {
-      await rm(path.join(memberDir(id), oldPhoto), { force: true });
+      await rm(path.join(memberDir(projectId, id), oldPhoto), { force: true });
     }
     // Old shots were generated from the photo being replaced, so they're
     // being invalidated (member.shots = {} below) — remove their files too
     // rather than leaving them orphaned on disk.
     await Promise.all(
       Object.values(member.shots).map((shot) =>
-        rm(path.join(memberDir(id), shot.file), { force: true })
+        rm(path.join(memberDir(projectId, id), shot.file), { force: true })
       )
     );
     member.shots = {};
@@ -120,7 +137,7 @@ export async function updateMember(
   if (patch.shots) {
     const shots: Record<string, StoredShot> = {};
     for (const [shotId, shot] of Object.entries(patch.shots)) {
-      shots[shotId] = { file: await saveMemberImage(id, shotId, shot.image), cost: shot.cost };
+      shots[shotId] = { file: await saveMemberImage(projectId, id, shotId, shot.image), cost: shot.cost };
     }
     member.shots = shots;
   }
@@ -128,30 +145,32 @@ export async function updateMember(
   if (patch.stageColor !== undefined) member.stageColor = patch.stageColor;
 
   roster[idx] = member;
-  await writeRoster(roster);
+  await writeRoster(projectId, roster);
   return member;
 }
 
-export async function deleteMember(id: string): Promise<void> {
-  const roster = await readRoster();
-  await writeRoster(roster.filter((m) => m.id !== id));
-  await rm(memberDir(id), { recursive: true, force: true });
+export async function deleteMember(projectId: string, id: string): Promise<void> {
+  const roster = await readRoster(projectId);
+  await writeRoster(projectId, roster.filter((m) => m.id !== id));
+  await rm(memberDir(projectId, id), { recursive: true, force: true });
 }
 
-export async function readMemberFile(id: string, filename: string): Promise<Buffer> {
-  return readFile(path.join(memberDir(id), filename));
+export async function readMemberFile(projectId: string, id: string, filename: string): Promise<Buffer> {
+  return readFile(path.join(memberDir(projectId, id), safeSegment("filename", filename)));
 }
 
 /** Maps a stored member (filenames on disk) to the client-facing shape (servable URLs). */
-export function toClientMember(m: StoredCastMember) {
+export function toClientMember(projectId: string, m: StoredCastMember) {
+  // Image URLs name their project, so they keep working after a switch.
+  const file = (name: string) => `/api/cast/${m.id}/file/${name}?project=${projectId}`;
   return {
     id: m.id,
     name: m.name,
-    photo: m.photo ? `/api/cast/${m.id}/file/${m.photo}` : "",
+    photo: m.photo ? file(m.photo) : "",
     shots: Object.fromEntries(
       Object.entries(m.shots).map(([shotId, s]) => [
         shotId,
-        { image: `/api/cast/${m.id}/file/${s.file}`, cost: s.cost },
+        { image: file(s.file), cost: s.cost },
       ])
     ),
     stageColor: m.stageColor ?? null,

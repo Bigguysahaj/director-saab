@@ -26,6 +26,7 @@
 
 # cast roster + generated character-sheet images (local disk, not committed)
 /.data/
+/.data-e2e/
 
 # editors
 .vscode/

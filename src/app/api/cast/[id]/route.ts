@@ -1,39 +1,44 @@
 import { NextResponse } from "next/server";
 import { deleteMember, updateMember, toClientMember } from "@/lib/castStore";
+import { withProject } from "@/lib/projectStore";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const body = (await req.json()) as {
-    name?: string;
-    photo?: string; // data URL
-    shots?: Record<string, { image: string; cost: number }>;
-    stageColor?: string | null;
-  };
+  return withProject(req, async (projectId) => {
+    const body = (await req.json()) as {
+      name?: string;
+      photo?: string; // data URL
+      shots?: Record<string, { image: string; cost: number }>;
+      stageColor?: string | null;
+    };
 
-  try {
-    const member = await updateMember(id, {
-      name: body.name,
-      photoDataUrl: body.photo,
-      shots: body.shots,
-      stageColor: body.stageColor,
-    });
-    return NextResponse.json(toClientMember(member));
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Update failed" },
-      { status: 404 }
-    );
-  }
+    try {
+      const member = await updateMember(projectId, id, {
+        name: body.name,
+        photoDataUrl: body.photo,
+        shots: body.shots,
+        stageColor: body.stageColor,
+      });
+      return NextResponse.json(toClientMember(projectId, member));
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Update failed" },
+        { status: 404 },
+      );
+    }
+  });
 }
 
 export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  await deleteMember(id);
-  return NextResponse.json({ ok: true });
+  return withProject(req, async (projectId) => {
+    await deleteMember(projectId, id);
+    return NextResponse.json({ ok: true });
+  });
 }
