@@ -24,6 +24,7 @@ import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
 import { JOINTS, resolvePose } from "@/lib/poses/model";
 import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
 import { fitAspect, pickRecorderMimeType } from "@/lib/videoReference";
+import { STAGE_LAYOUT_KEY, saveStageSnapshot } from "@/lib/stageSnapshots";
 
 const BACKDROP_COLOR = "#e8e2d6";
 // Chroma green for keying the captured clip in an editor.
@@ -80,7 +81,6 @@ const DEFAULT_FOV = 50;
 // are ignored instead of crashing on load. v2 adds mannequin `pose` and
 // `keyframes`; v3 adds `castId` — all optional, but old saves are dropped
 // anyway per convention.
-const STORAGE_KEY = "director-stage-layout-v3";
 
 // Opt-in "+ Keypoints" toggle: when on, Capture photo also downloads the eval
 // keypoint JSON (evals/). Off by default so a normal capture is just the PNG.
@@ -901,7 +901,7 @@ function TransformReadout({ mode, position, rotation, label }: { mode: "translat
 function loadSavedObjects(): SceneObject[] {
   if (typeof window === "undefined") return INITIAL_OBJECTS;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STAGE_LAYOUT_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -1084,6 +1084,8 @@ export function StageScene() {
     // MediaRecorder can't write MP4 (we don't bundle a transcoder).
     const { mimeType, ext, seedanceReady } = pickRecorderMimeType((t) => MediaRecorder.isTypeSupported(t));
     const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType });
+    // The layout being filmed, logged with the take when it's sent (ENG-001).
+    const recordedLayout = objects;
     recordedChunks.current = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunks.current.push(e.data);
@@ -1092,7 +1094,9 @@ export function StageScene() {
       // Every stop path (button, take end, pause) lands here, so a take cut
       // short can't leave the flag set and kill the next manual recording.
       recordingTake.current = false;
-      downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${Date.now()}.${ext}`);
+      const ts = Date.now();
+      saveStageSnapshot(localStorage, ts, recordedLayout);
+      downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${ts}.${ext}`);
       setRecorderNotice(seedanceReady ? null : "Saved as WebM: convert to MP4 before sending to Seedance.");
       setIsRecording(false);
       if (autoEnteredCameraView.current) setLookingThrough(false);
@@ -1162,7 +1166,7 @@ export function StageScene() {
   // Auto-save on every change (drag, rotate, pose, keyframe, add, duplicate).
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(objects));
+      localStorage.setItem(STAGE_LAYOUT_KEY, JSON.stringify(objects));
     } catch {
       // storage full or unavailable (private browsing) — layout just won't persist
     }
@@ -1199,7 +1203,7 @@ export function StageScene() {
 
   function resetLayout() {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STAGE_LAYOUT_KEY);
     } catch {}
     setObjects(INITIAL_OBJECTS);
     setSelectedId(null);
