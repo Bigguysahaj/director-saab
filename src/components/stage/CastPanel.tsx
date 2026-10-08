@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { loadCast, updateMember, type CastMember } from "@/lib/cast";
+import { createMember, deleteMember, loadCast, updateMember, type CastMember } from "@/lib/cast";
 
 /**
  * "+ Cast" popover on Stage: pick from the roster built at /audition to
  * assign a likeness to the selected mannequin. Assigning also copies the
  * mannequin's color-code onto the cast member's `stageColor` (cleared on
  * unassign) — that's what the /audition Screen Test section reads to know
- * which cast member goes in which mannequin's spot. Otherwise read-only
- * here: creating and generating cast members happens on /audition; this
- * just lists whatever's on disk (see src/lib/cast.ts).
+ * which cast member goes in which mannequin's spot. Generating cast members
+ * happens on /audition; "Add from sheet" here only adds one whose character
+ * sheet (and optional close-up) already exists, stored whole.
  */
 export function CastPanel({
   open,
@@ -29,6 +29,34 @@ export function CastPanel({
   onAssign: (id: string | null) => void;
 }) {
   const [cast, setCast] = useState<CastMember[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [sheet, setSheet] = useState("");
+  const [closeup, setCloseup] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function addFromSheet() {
+    setSaving(true);
+    setError(null);
+    try {
+      const member = await createMember(name.trim());
+      // Don't leave a sheetless member behind if the upload fails.
+      const saved = await updateMember(member.id, { sheet, closeup: closeup || undefined }).catch((err) => {
+        deleteMember(member.id);
+        throw err;
+      });
+      setCast((prev) => [...prev, saved]);
+      setAdding(false);
+      setName("");
+      setSheet("");
+      setCloseup("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't add cast member");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +86,7 @@ export function CastPanel({
           ) : (
             <div className="flex flex-col gap-1">
               {cast.map((member) => {
-                const thumb = Object.values(member.shots)[0]?.image ?? member.photo;
+                const thumb = Object.values(member.shots)[0]?.image ?? (member.photo || member.sheet);
                 const isAssigned = assignedId === member.id;
                 return (
                   <button
@@ -91,6 +119,43 @@ export function CastPanel({
             </div>
           )}
 
+          {adding ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-2">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Name"
+                aria-label="Cast member name"
+                className="rounded-full border border-border bg-transparent px-3 py-1.5 text-[11px] text-fg focus:border-accent focus:outline-none"
+              />
+              <SheetDrop label="Character sheet" value={sheet} onChange={setSheet} />
+              <SheetDrop label="Close-up (optional)" value={closeup} onChange={setCloseup} />
+              {error && <p role="alert" className="text-[10px] text-warn">{error}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAdding(false)}
+                  className="flex-1 rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim hover:text-fg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addFromSheet}
+                  disabled={!name.trim() || !sheet || saving}
+                  className="flex-1 rounded-full border border-accent px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40"
+                >
+                  {saving ? "Adding…" : "Add"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+            >
+              + Add from sheet
+            </button>
+          )}
+
           <Link
             href="/audition"
             className="rounded-full border border-border px-3 py-1.5 text-center text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
@@ -108,5 +173,40 @@ export function CastPanel({
         {open ? "× Cast" : "+ Cast"}
       </button>
     </div>
+  );
+}
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Click-or-drop image picker; the image is kept whole as a data URL. */
+function SheetDrop({ label, value, onChange }: { label: string; value: string; onChange: (dataUrl: string) => void }) {
+  const take = (file?: File) => {
+    if (file?.type.startsWith("image/")) readDataUrl(file).then(onChange);
+  };
+  return (
+    <label
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        take(e.dataTransfer.files[0]);
+      }}
+      className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border p-2 hover:border-accent"
+    >
+      {value ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={value} alt={label} className="h-10 w-10 shrink-0 rounded object-cover" />
+      ) : (
+        <div className="h-10 w-10 shrink-0 rounded border border-border" />
+      )}
+      <span className="text-[10px] uppercase tracking-[0.15em] text-fg-dim">{label}</span>
+      <input type="file" accept="image/*" aria-label={label} className="hidden" onChange={(e) => take(e.target.files?.[0])} />
+    </label>
   );
 }

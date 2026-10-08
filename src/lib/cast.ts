@@ -6,6 +6,8 @@ export type CastMember = {
   photo: string; // URL served from /api/cast/[id]/file/[filename], "" if none
   shots: Record<string, CastMemberShot>; // shotId -> generated result
   stageColor: string | null; // hex of the mannequin this member is currently assigned to on /stage, if any (see CastPanel.tsx)
+  sheet: string; // ready-made character sheet URL, "" if none
+  closeup: string; // optional close-up detail sheet URL, "" if none
 };
 
 /**
@@ -33,7 +35,14 @@ export async function createMember(name: string): Promise<CastMember> {
 
 export async function updateMember(
   id: string,
-  patch: { name?: string; photo?: string; shots?: Record<string, CastMemberShot>; stageColor?: string | null }
+  patch: {
+    name?: string;
+    photo?: string;
+    shots?: Record<string, CastMemberShot>;
+    stageColor?: string | null;
+    sheet?: string; // data URL
+    closeup?: string; // data URL
+  }
 ): Promise<CastMember> {
   const res = await fetch(`/api/cast/${id}`, {
     method: "PATCH",

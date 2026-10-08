@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { loadCast, type CastMember } from "@/lib/cast";
 import type { GenerateRequest, VideoModel } from "@/lib/types";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
 
@@ -41,6 +42,12 @@ function readDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Couldn't load that character sheet.");
+  return readDataUrl(new File([await res.blob()], ""));
 }
 
 /** Length of an audio/video file in seconds. MediaRecorder output often has
@@ -114,6 +121,17 @@ export function SendTake({
   const [duration, setDuration] = useState<number>();
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetCast, setSheetCast] = useState<CastMember[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadCast().then((cast) => {
+      if (!cancelled) setSheetCast(cast.filter((m) => m.sheet));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const model = models.find((m) => m.id === modelId) ?? models.find((m) => m.id === DEFAULT_MODEL) ?? models[0];
   const resolutions = model?.supported_resolutions ?? [];
@@ -225,6 +243,32 @@ export function SendTake({
               }}
             />
           </label>
+          {sheetCast.length > 0 && (
+            <label className="flex flex-col gap-1">
+              <span className={LABEL}>Or cast from sheet</span>
+              <select
+                aria-label="Cast from sheet"
+                defaultValue=""
+                disabled={disabled}
+                className={FIELD}
+                onChange={(e) => {
+                  const member = sheetCast.find((m) => m.id === e.target.value);
+                  if (!member) return setImages([]);
+                  // Both sheets go as-is, sheet first so it's @Image1.
+                  const urls = [member.sheet, member.closeup].filter(Boolean);
+                  pick(
+                    () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
+                    setImages,
+                  );
+                }}
+              >
+                <option value="">—</option>
+                {sheetCast.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Voice line (MP3/WAV, optional)</span>
             <input
