@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GenerateTakeRequest, GenerationStatus } from "./types";
+import type { GenerateRequest, GenerationStatus } from "./types";
 
 export type GenerationState = {
   jobId: string | null;
@@ -74,7 +74,7 @@ export function useGeneration(onSettled?: (state: GenerationState) => void) {
     };
   });
 
-  const submit = useCallback(async (body: GenerateTakeRequest) => {
+  const submit = useCallback(async (body: GenerateRequest) => {
     cancelled.current = false;
     setState({ jobId: null, status: "pending", error: null, videoUrl: null, cost: null });
     try {
