@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createMember, deleteMember, loadCast, updateMember, type CastMember } from "@/lib/cast";
+import { blobToDataUrl, createMember, deleteMember, loadCast, updateMember, type CastMember } from "@/lib/cast";
 
 /**
  * "+ Cast" popover on Stage: pick from the roster built at /audition to
@@ -176,15 +176,6 @@ export function CastPanel({
   );
 }
 
-function readDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 // The types castStore saves under their real extension (and Seedance takes).
 const SHEET_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -194,7 +185,7 @@ function SheetDrop({ label, value, onChange }: { label: string; value: string; o
   const take = (file?: File) => {
     if (!file) return;
     setError(!SHEET_TYPES.includes(file.type));
-    if (SHEET_TYPES.includes(file.type)) readDataUrl(file).then(onChange);
+    if (SHEET_TYPES.includes(file.type)) blobToDataUrl(file).then(onChange);
   };
   return (
     <label

@@ -17,6 +17,15 @@ export type CastMember = {
  * directly as files.
  */
 
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read blob"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function loadCast(): Promise<CastMember[]> {
   const res = await fetch("/api/cast");
   if (!res.ok) return [];

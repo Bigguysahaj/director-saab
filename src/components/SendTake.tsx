@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadCast, type CastMember } from "@/lib/cast";
 import type { GenerateRequest, VideoModel } from "@/lib/types";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
@@ -125,6 +125,8 @@ export function SendTake({
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetCast, setSheetCast] = useState<CastMember[]>([]);
+  // Latest dropdown pick, so a slower earlier load can't attach its sheets.
+  const pickedCastId = useRef("");
 
   useEffect(() => {
     let cancelled = false;
@@ -255,13 +257,17 @@ export function SendTake({
                 disabled={disabled}
                 className={FIELD}
                 onChange={(e) => {
+                  pickedCastId.current = e.target.value;
+                  setCastImages([]);
                   const member = sheetCast.find((m) => m.id === e.target.value);
-                  if (!member) return setCastImages([]);
+                  if (!member) return;
                   // Both sheets go as-is, sheet first so it's @Image1.
                   const urls = [member.sheet, member.closeup].filter(Boolean);
                   pick(
                     () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
-                    setCastImages,
+                    (imgs) => {
+                      if (pickedCastId.current === member.id) setCastImages(imgs);
+                    },
                   );
                 }}
               >
