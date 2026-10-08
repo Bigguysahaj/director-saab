@@ -113,7 +113,10 @@ export function SendTake({
   onSubmit: (body: GenerateRequest, take: SubmittedTake) => void;
 }) {
   const [video, setVideo] = useState<Media | null>(null);
-  const [images, setImages] = useState<Picture[]>([]);
+  const [uploads, setUploads] = useState<Picture[]>([]);
+  const [castImages, setCastImages] = useState<Picture[]>([]);
+  // Cast sheets lead so the sheet stays @Image1; uploads follow.
+  const images = [...castImages, ...uploads];
   const [audio, setAudio] = useState<Media | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>();
@@ -239,7 +242,7 @@ export function SendTake({
               className="text-[11px] text-fg-dim"
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []).slice(0, MAX_CHARACTER_IMAGES);
-                pick(() => Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await readDataUrl(f) }))), setImages);
+                pick(() => Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await readDataUrl(f) }))), setUploads);
               }}
             />
           </label>
@@ -253,12 +256,12 @@ export function SendTake({
                 className={FIELD}
                 onChange={(e) => {
                   const member = sheetCast.find((m) => m.id === e.target.value);
-                  if (!member) return setImages([]);
+                  if (!member) return setCastImages([]);
                   // Both sheets go as-is, sheet first so it's @Image1.
                   const urls = [member.sheet, member.closeup].filter(Boolean);
                   pick(
                     () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
-                    setImages,
+                    setCastImages,
                   );
                 }}
               >
