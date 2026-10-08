@@ -5,7 +5,7 @@ import { useVideoModels } from "@/lib/useVideoModels";
 import { useGeneration, type GenerationState } from "@/lib/useGeneration";
 import { loadTakes, saveTakes, upsertTake, removeTake } from "@/lib/history";
 import { createProject, loadProjects, setActiveProject, type Project } from "@/lib/projects";
-import type { GenerateRequest, Take } from "@/lib/types";
+import type { GenerateRequest, GenerateTakeRequest, Take } from "@/lib/types";
 import { Slate } from "./Slate";
 import { PromptStage } from "./PromptStage";
 import { ControlRail } from "./ControlRail";
@@ -141,7 +141,7 @@ export function Studio() {
     await submit(body);
   }
 
-  async function sendTake(body: GenerateRequest, take: SubmittedTake) {
+  async function sendTake(body: GenerateTakeRequest, take: SubmittedTake) {
     if (rolling || !projectId) return;
     setPendingId(null);
     setSubmitted({ ...take, projectId });
@@ -239,6 +239,10 @@ export function Studio() {
         takes={takes}
         onSelect={reopenTake}
         onRemove={(id) => projectId && persist(projectId, removeTake(loadTakes(projectId), id))}
+        onKept={(id, kept) => {
+          const take = projectId && loadTakes(projectId).find((t) => t.id === id);
+          if (take) persist(projectId, upsertTake(loadTakes(projectId), { ...take, kept }));
+        }}
       />
     </div>
   );
