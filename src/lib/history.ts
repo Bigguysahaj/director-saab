@@ -2,19 +2,24 @@ import type { Take } from "./types";
 
 const KEY = "director.dailies.v1";
 
-export function loadTakes(): Take[] {
+// Default keeps the pre-projects key so its existing Dailies carry over.
+function keyFor(projectId: string): string {
+  return projectId === "default" ? KEY : `${KEY}:${projectId}`;
+}
+
+export function loadTakes(projectId: string): Take[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(keyFor(projectId));
     return raw ? (JSON.parse(raw) as Take[]) : [];
   } catch {
     return [];
   }
 }
 
-export function saveTakes(takes: Take[]) {
+export function saveTakes(projectId: string, takes: Take[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(KEY, JSON.stringify(takes.slice(0, 60)));
+  window.localStorage.setItem(keyFor(projectId), JSON.stringify(takes.slice(0, 60)));
 }
 
 export function upsertTake(takes: Take[], take: Take): Take[] {

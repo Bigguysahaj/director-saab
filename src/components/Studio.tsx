@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useVideoModels } from "@/lib/useVideoModels";
 import { useGeneration, type GenerationState } from "@/lib/useGeneration";
 import { loadTakes, saveTakes, upsertTake, removeTake } from "@/lib/history";
+import { createProject, loadProjects, setActiveProject, type Project } from "@/lib/projects";
 import type { GenerateRequest, Take } from "@/lib/types";
 import { Slate } from "./Slate";
 import { PromptStage } from "./PromptStage";
@@ -11,6 +12,7 @@ import { ControlRail } from "./ControlRail";
 import { Viewer } from "./Viewer";
 import { Dailies } from "./Dailies";
 import { SendTake, type SubmittedTake } from "./SendTake";
+import { ProjectPicker } from "./ProjectPicker";
 
 function pickDefault<T>(options: T[], preferred?: T): T | undefined {
   if (preferred !== undefined && options.includes(preferred)) return preferred;
@@ -20,6 +22,8 @@ function pickDefault<T>(options: T[], preferred?: T): T | undefined {
 export function Studio() {
   const { models, live, loading } = useVideoModels();
   const [takes, setTakes] = useState<Take[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const [modelId, setModelId] = useState<string>();
@@ -34,16 +38,44 @@ export function Studio() {
   // What the in-flight job was submitted with: the Action button and the
   // Send-take panel each have their own prompt/model, so Dailies records
   // whichever one actually went out.
-  const [submitted, setSubmitted] = useState<SubmittedTake | null>(null);
+  // A take belongs to the project it was sent from, even if the user
+  // switches before it settles.
+  const [submitted, setSubmitted] = useState<(SubmittedTake & { projectId: string }) | null>(null);
 
   useEffect(() => {
-    // localStorage is only readable client-side; reading it here (rather
-    // than as a lazy useState initializer) keeps the first client render
-    // matching the server-rendered (empty) markup and avoids a hydration
-    // mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTakes(loadTakes());
+    // Takes come from localStorage, which is only readable client-side;
+    // loading here (rather than as a lazy useState initializer) keeps the
+    // first client render matching the server-rendered (empty) markup and
+    // avoids a hydration mismatch.
+    let cancelled = false;
+    loadProjects()
+      .then(({ projects, activeId }) => {
+        if (cancelled) return;
+        setProjects(projects);
+        showProject(activeId);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  function showProject(id: string) {
+    setProjectId(id);
+    setPendingId(null);
+    setTakes(loadTakes(id));
+  }
+
+  async function switchProject(id: string) {
+    await setActiveProject(id);
+    showProject(id);
+  }
+
+  async function addProject(name: string) {
+    const project = await createProject(name);
+    setProjects((prev) => [...prev, project]);
+    showProject(project.id);
+  }
 
   const model = models.find((m) => m.id === modelId) ?? models[0];
 
@@ -59,15 +91,16 @@ export function Studio() {
     if (!model.supports_frame_images) setReference(null);
   }
 
-  function persist(next: Take[]) {
-    setTakes(next);
-    saveTakes(next);
+  function persist(id: string, next: Take[]) {
+    saveTakes(id, next);
+    if (id === projectId) setTakes(next);
   }
 
   const { state, submit } = useGeneration((settled: GenerationState) => {
     if (!settled.jobId || !submitted) return;
     persist(
-      upsertTake(loadTakes(), {
+      submitted.projectId,
+      upsertTake(loadTakes(submitted.projectId), {
         id: settled.jobId,
         prompt: submitted.prompt,
         model: submitted.model.id,
@@ -87,7 +120,7 @@ export function Studio() {
   const rolling = state.status === "pending" || state.status === "in_progress";
 
   async function handleAction() {
-    if (!model || !prompt.trim() || rolling) return;
+    if (!model || !prompt.trim() || rolling || !projectId) return;
     setPendingId(null);
 
     const body: GenerateRequest = {
@@ -104,14 +137,14 @@ export function Studio() {
           : undefined,
     };
 
-    setSubmitted({ prompt: body.prompt, model, duration, resolution, aspectRatio });
+    setSubmitted({ prompt: body.prompt, model, duration, resolution, aspectRatio, projectId });
     await submit(body);
   }
 
   async function sendTake(body: GenerateRequest, take: SubmittedTake) {
-    if (rolling) return;
+    if (rolling || !projectId) return;
     setPendingId(null);
-    setSubmitted(take);
+    setSubmitted({ ...take, projectId });
     await submit(body);
   }
 
@@ -135,7 +168,13 @@ export function Studio() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Slate live={live} takeCount={takes.length} />
+      <Slate
+        live={live}
+        takeCount={takes.length}
+        project={
+          <ProjectPicker projects={projects} activeId={projectId} onSwitch={switchProject} onCreate={addProject} />
+        }
+      />
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
         <Viewer
@@ -199,7 +238,7 @@ export function Studio() {
       <Dailies
         takes={takes}
         onSelect={reopenTake}
-        onRemove={(id) => persist(removeTake(loadTakes(), id))}
+        onRemove={(id) => projectId && persist(projectId, removeTake(loadTakes(projectId), id))}
       />
     </div>
   );
