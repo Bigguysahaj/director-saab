@@ -1,5 +1,5 @@
 import "server-only";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./projectStore";
 import type { GenerateRequest, GenerationStatus } from "./types";
@@ -136,6 +136,24 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
+// Output downloads in progress, by take id, so two "completed" polls that
+// arrive together share one download instead of racing.
+const savingOutput = new Map<string, Promise<void>>();
+
+async function saveOutput(outputPath: string, fetchOutput: () => Promise<Response>): Promise<void> {
+  // Written under a temp name and renamed into place, so a half-written
+  // video never sits at output.mp4.
+  const tmp = `${outputPath}.${process.pid}.tmp`;
+  try {
+    const res = await fetchOutput();
+    await writeFile(tmp, Buffer.from(await res.arrayBuffer()));
+    await rename(tmp, outputPath);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
+}
+
 /** Records a job's final status. On completion the rendered video is saved
  * once; polling the same finished job again doesn't download it twice. */
 export async function recordTakeResult(
@@ -147,8 +165,12 @@ export async function recordTakeResult(
   const outputPath = path.join(takeDir(id), "output.mp4");
   let output = take.output;
   if (result.status === "completed" && !(await exists(outputPath))) {
-    const res = await fetchOutput();
-    await writeFile(outputPath, Buffer.from(await res.arrayBuffer()));
+    let saving = savingOutput.get(id);
+    if (!saving) {
+      saving = saveOutput(outputPath, fetchOutput).finally(() => savingOutput.delete(id));
+      savingOutput.set(id, saving);
+    }
+    await saving;
     output = "output.mp4";
   }
   await writeTake({
