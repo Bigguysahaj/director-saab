@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -89,8 +89,8 @@ describe("takeLog", () => {
 
     expect(fetchOutput).toHaveBeenCalledTimes(1);
     const take = await readTake("job-done");
-    expect(take).toMatchObject({ status: "completed", cost: 0.21, output: "output.mp4" });
-    expect((await readFile(path.join(takeDir("job-done"), "output.mp4"))).toString()).toBe("video-out");
+    expect(take).toMatchObject({ status: "completed", cost: 0.21 });
+    expect((await readFile(path.join(takeDir("job-done"), take.output!))).toString()).toBe("video-out");
   });
 
   it("downloads once when two completed polls arrive together", async () => {
@@ -107,8 +107,8 @@ describe("takeLog", () => {
     ]);
 
     expect(fetchOutput).toHaveBeenCalledTimes(1);
-    expect((await readTake("job-race")).output).toBe("output.mp4");
-    expect((await readFile(path.join(takeDir("job-race"), "output.mp4"))).toString()).toBe("video-out");
+    const output = (await readTake("job-race")).output!;
+    expect((await readFile(path.join(takeDir("job-race"), output))).toString()).toBe("video-out");
     // Written via a temp file; nothing half-written is left behind.
     expect((await readdir(takeDir("job-race"))).filter((f) => f.includes("tmp"))).toEqual([]);
   });
@@ -119,11 +119,12 @@ describe("takeLog", () => {
       throw new Error("network");
     });
 
+    const before = await readdir(takeDir("job-retry"));
     await expect(recordTakeResult("job-retry", { status: "completed" }, broken)).rejects.toThrow("network");
-    expect((await readdir(takeDir("job-retry"))).filter((f) => f.includes("output"))).toEqual([]);
+    expect(await readdir(takeDir("job-retry"))).toEqual(before);
 
     await recordTakeResult("job-retry", { status: "completed" }, async () => new Response("video-out"));
-    expect((await readTake("job-retry")).output).toBe("output.mp4");
+    expect((await readTake("job-retry")).output).toMatch(/\.mp4$/);
   });
 
   it("records a failed take with its error and no output", async () => {
@@ -149,5 +150,50 @@ describe("takeLog", () => {
 
   it("rejects ids that could escape the takes folder", async () => {
     await expect(logSubmittedTake({ id: "../evil", request })).rejects.toThrow();
+  });
+
+  describe("video names", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("numbers takes per project", async () => {
+      await logSubmittedTake({ id: "g1", request, project: "gini-first-vid" });
+      await logSubmittedTake({ id: "d1", request, project: "default" });
+      await logSubmittedTake({ id: "g2", request, project: "gini-first-vid" });
+
+      expect((await readTake("g1")).takeNumber).toBe(1);
+      expect((await readTake("g2")).takeNumber).toBe(2);
+      expect((await readTake("d1")).takeNumber).toBe(1);
+    });
+
+    it("names the video <project>_take-<NN>_<YYYYMMDD-HHMM>.mp4", async () => {
+      // Only Date is faked; local time, so the name matches the user's clock.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 9, 14, 32));
+      await logSubmittedTake({ id: "g1", request, project: "gini-first-vid" });
+      await logSubmittedTake({ id: "g2", request, project: "gini-first-vid" });
+
+      await recordTakeResult("g2", { status: "completed" }, async () => new Response("video-out"));
+
+      const name = "gini-first-vid_take-02_20261009-1432.mp4";
+      expect((await readTake("g2")).output).toBe(name);
+      expect((await readFile(path.join(takeDir("g2"), name))).toString()).toBe("video-out");
+    });
+
+    it("keeps takes saved before naming working as output.mp4", async () => {
+      await logSubmittedTake({ id: "old", request });
+      // A record from before take numbers existed, its video already saved.
+      const record = JSON.parse(await readFile(path.join(takeDir("old"), "take.json"), "utf-8"));
+      delete record.takeNumber;
+      await writeFile(path.join(takeDir("old"), "take.json"), JSON.stringify({ ...record, status: "completed", output: "output.mp4" }));
+      await writeFile(path.join(takeDir("old"), "output.mp4"), "old-video");
+      const fetchOutput = vi.fn(async () => new Response("new-video"));
+
+      await recordTakeResult("old", { status: "completed" }, fetchOutput);
+
+      expect(fetchOutput).not.toHaveBeenCalled();
+      expect((await readTake("old")).output).toBe("output.mp4");
+    });
   });
 });
