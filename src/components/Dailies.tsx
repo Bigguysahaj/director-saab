@@ -16,12 +16,29 @@ export function Dailies({
   takes,
   onSelect,
   onRemove,
+  onKept,
 }: {
   takes: Take[];
   onSelect: (take: Take) => void;
   onRemove: (id: string) => void;
+  onKept: (id: string, kept: boolean) => void;
 }) {
   if (takes.length === 0) return null;
+
+  // Kept / discarded goes to the server take log (the training signal), then
+  // into the local reel so the choice shows up here.
+  async function mark(id: string, kept: boolean) {
+    try {
+      const res = await fetch(`/api/takes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kept }),
+      });
+      if (res.ok) onKept(id, kept);
+    } catch {
+      // offline or server down: leave the take unmarked
+    }
+  }
 
   return (
     <div className="border-t border-border bg-bg-raised">
@@ -59,6 +76,28 @@ export function Dailies({
               </span>
               <span className="text-[9px] text-fg-faint">{take.modelLabel}</span>
             </button>
+            {take.status === "completed" && (
+              <div className="absolute bottom-1 right-1 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => mark(take.id, true)}
+                  aria-label="Keep take"
+                  aria-pressed={take.kept === true}
+                  className={`cursor-pointer rounded-sm px-1 text-[9px] uppercase tracking-wider ${take.kept === true ? "bg-ok text-bg" : "text-fg-faint hover:text-ok"}`}
+                >
+                  Keep
+                </button>
+                <button
+                  type="button"
+                  onClick={() => mark(take.id, false)}
+                  aria-label="Discard take"
+                  aria-pressed={take.kept === false}
+                  className={`cursor-pointer rounded-sm px-1 text-[9px] uppercase tracking-wider ${take.kept === false ? "bg-warn text-bg" : "text-fg-faint hover:text-warn"}`}
+                >
+                  Discard
+                </button>
+              </div>
+            )}
             <Sprockets />
             <button
               type="button"

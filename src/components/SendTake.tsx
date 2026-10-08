@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { loadCast, type CastMember } from "@/lib/cast";
-import type { GenerateRequest, VideoModel } from "@/lib/types";
+import type { GenerateTakeRequest, VideoModel } from "@/lib/types";
+import { stageSpecForClip, type StageSpec } from "@/lib/stageSnapshots";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
 
 const DEFAULT_MODEL = "bytedance/seedance-2.0-mini";
@@ -110,9 +111,11 @@ export function SendTake({
   // Already filtered to models that accept a video reference.
   models: VideoModel[];
   disabled?: boolean;
-  onSubmit: (body: GenerateRequest, take: SubmittedTake) => void;
+  onSubmit: (body: GenerateTakeRequest, take: SubmittedTake) => void;
 }) {
   const [video, setVideo] = useState<Media | null>(null);
+  // The /stage layout this clip was recorded from, logged with the take.
+  const [stageSpec, setStageSpec] = useState<{ stage: StageSpec | null; warning: string | null } | null>(null);
   const [uploads, setUploads] = useState<Picture[]>([]);
   const [castImages, setCastImages] = useState<Picture[]>([]);
   // Cast sheets lead so the sheet stays @Image1; uploads follow.
@@ -162,7 +165,7 @@ export function SendTake({
     }
   }
 
-  function buildRequest(): GenerateRequest {
+  function buildRequest(): GenerateTakeRequest {
     if (!model || !video) throw new Error("Pick a recorded take (MP4) first.");
     if (!prompt.trim()) throw new Error("Add a prompt.");
     return {
@@ -177,6 +180,7 @@ export function SendTake({
         images: images.map((i) => i.dataUrl),
         audio: audio ? { url: audio.dataUrl, seconds: audio.seconds } : undefined,
       }),
+      stage: stageSpec?.stage ?? undefined,
     };
   }
 
@@ -228,10 +232,12 @@ export function SendTake({
               className="text-[11px] text-fg-dim"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                setStageSpec(file ? stageSpecForClip(localStorage, file.name) : null);
                 if (!file) return setVideo(null);
                 pick(() => loadMedia(file, "video"), setVideo);
               }}
             />
+            {stageSpec?.warning && <span className="text-[11px] text-warn">{stageSpec.warning}</span>}
           </label>
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Character images (≤{MAX_CHARACTER_IMAGES})</span>

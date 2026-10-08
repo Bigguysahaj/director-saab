@@ -67,6 +67,11 @@ export type GenerateRequest = {
   input_references?: InputReference[];
 };
 
+// What the Studio posts to /api/generate: the OpenRouter request plus the
+// /stage spec a take was recorded from, which the server logs and strips.
+// `stage` and `project` are for the take log only; /api/generate strips both.
+export type GenerateTakeRequest = GenerateRequest & { stage?: unknown; project?: string };
+
 export type ImageGenerateRequest = {
   model: string;
   prompt: string;
@@ -102,4 +107,5 @@ export type Take = {
   videoUrl?: string;
   cost?: number;
   error?: string;
+  kept?: boolean | null; // set from Dailies; also saved in the server take log
 };
