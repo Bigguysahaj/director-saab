@@ -2,6 +2,7 @@ import "server-only";
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./projectStore";
+import { writeJson } from "./writeJson";
 import type { GenerateRequest, GenerationStatus } from "./types";
 
 /**
@@ -159,7 +160,7 @@ export async function readTake(id: string): Promise<LoggedTake> {
 }
 
 async function writeTake(take: LoggedTake): Promise<void> {
-  await writeFile(path.join(takeDir(take.id), "take.json"), JSON.stringify(take, null, 2));
+  await writeJson(path.join(takeDir(take.id), "take.json"), take);
 }
 
 async function exists(file: string): Promise<boolean> {

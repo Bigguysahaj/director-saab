@@ -9,33 +9,45 @@ export function ProjectPicker({
   activeId,
   onSwitch,
   onCreate,
+  onRename,
+  onDelete,
+  deletingDisabled = false,
 }: {
   projects: Project[];
   activeId: string | null;
-  onSwitch: (id: string) => void;
+  onSwitch: (id: string) => Promise<void>;
   onCreate: (name: string) => Promise<void>;
+  onRename: (name: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  deletingDisabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [naming, setNaming] = useState(false);
+  const [naming, setNaming] = useState<"create" | "rename" | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const active = projects.find((p) => p.id === activeId);
 
   function close() {
     setOpen(false);
-    setNaming(false);
+    setNaming(null);
+    setDeleting(false);
     setName("");
     setError(null);
   }
 
-  async function create(e: React.FormEvent) {
+  async function act(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try { await action(); close(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Project update failed"); }
+    finally { setBusy(false); }
+  }
+
+  function save(e: React.FormEvent) {
     e.preventDefault();
-    try {
-      await onCreate(name);
-      close();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't create the project");
-    }
+    void act(() => naming === "rename" ? onRename(name) : onCreate(name));
   }
 
   return (
@@ -43,6 +55,7 @@ export function ProjectPicker({
       <button
         type="button"
         aria-label="Switch project"
+        disabled={busy}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}
@@ -64,10 +77,8 @@ export function ProjectPicker({
               key={p.id}
               type="button"
               role="menuitem"
-              onClick={() => {
-                close();
-                if (p.id !== activeId) onSwitch(p.id);
-              }}
+              disabled={busy}
+              onClick={() => void act(async () => { if (p.id !== activeId) await onSwitch(p.id); })}
               className={`rounded-lg px-3 py-1.5 text-left text-xs transition-colors hover:bg-accent-soft ${
                 p.id === activeId ? "bg-accent-soft text-fg" : "text-fg-dim"
               }`}
@@ -76,8 +87,14 @@ export function ProjectPicker({
             </button>
           ))}
 
-          {naming ? (
-            <form onSubmit={create} className="flex flex-col gap-2 border-t border-border px-1 pt-2">
+          {deleting ? (
+            <div role="alertdialog" aria-label="Delete project" className="flex flex-col gap-3 border-t border-border p-2 text-xs text-fg">
+              <p>Delete “{active?.name}”? Its cast, takes and videos will be permanently removed.</p>
+              <button type="button" disabled={busy} onClick={() => void act(onDelete)} className="rounded-lg border border-warn px-3 py-2 text-warn">Delete permanently</button>
+              <button type="button" disabled={busy} onClick={close}>Cancel</button>
+            </div>
+          ) : naming ? (
+            <form onSubmit={save} className="flex flex-col gap-2 border-t border-border px-1 pt-2">
               <label className="flex flex-col gap-1 text-[10px] uppercase tracking-[0.2em] text-fg-faint">
                 Project name
                 <input
@@ -87,25 +104,30 @@ export function ProjectPicker({
                   className="rounded-sm border border-border bg-bg px-2 py-1 text-xs normal-case tracking-normal text-fg focus:border-border-strong focus:outline-none"
                 />
               </label>
-              {error && <p className="text-[11px] text-warn">{error}</p>}
               <button
                 type="submit"
-                disabled={!name.trim()}
+                disabled={busy || !name.trim()}
                 className="self-end rounded-full border border-accent-dim px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-30"
               >
-                Create
+                {naming === "rename" ? "Save" : "Create"}
               </button>
             </form>
           ) : (
+            <>
             <button
               type="button"
               role="menuitem"
-              onClick={() => setNaming(true)}
+              disabled={busy}
+              onClick={() => setNaming("create")}
               className="rounded-lg border-t border-border px-3 py-1.5 text-left text-xs text-accent hover:bg-accent-soft"
             >
               New project
             </button>
+            <button type="button" role="menuitem" disabled={busy || !active} onClick={() => { setNaming("rename"); setName(active?.name ?? ""); }} className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-dim hover:bg-accent-soft">Rename project</button>
+            <button type="button" role="menuitem" disabled={busy || deletingDisabled || !active} onClick={() => setDeleting(true)} className="rounded-lg px-3 py-1.5 text-left text-xs text-warn hover:bg-accent-soft">Delete project</button>
+            </>
           )}
+          {error && <p role="alert" className="px-2 text-[11px] text-warn">{error}</p>}
         </div>
       )}
     </div>

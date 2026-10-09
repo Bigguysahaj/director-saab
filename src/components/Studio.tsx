@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useVideoModels } from "@/lib/useVideoModels";
 import { useGeneration, type GenerationState } from "@/lib/useGeneration";
 import { loadTakes, saveTakes, upsertTake, removeTake } from "@/lib/history";
-import { createProject, loadProjects, setActiveProject, type Project } from "@/lib/projects";
+import { createProject, deleteProject, loadProjects, renameProject, setActiveProject, type Project } from "@/lib/projects";
 import type { GenerateRequest, GenerateTakeRequest, Take } from "@/lib/types";
 import { Slate } from "./Slate";
 import { PromptStage } from "./PromptStage";
@@ -75,6 +75,21 @@ export function Studio() {
     const project = await createProject(name);
     setProjects((prev) => [...prev, project]);
     showProject(project.id);
+  }
+
+  async function renameActiveProject(name: string) {
+    if (!projectId) return;
+    const renamed = await renameProject(projectId, name);
+    setProjects((prev) => prev.map((p) => p.id === renamed.id ? renamed : p));
+  }
+
+  async function deleteActiveProject() {
+    if (!projectId) return;
+    const next = await deleteProject(projectId);
+    saveTakes(projectId, []);
+    setSubmitted(null);
+    setProjects(next.projects);
+    showProject(next.activeId);
   }
 
   const model = models.find((m) => m.id === modelId) ?? models[0];
@@ -172,7 +187,7 @@ export function Studio() {
         live={live}
         takeCount={takes.length}
         project={
-          <ProjectPicker projects={projects} activeId={projectId} onSwitch={switchProject} onCreate={addProject} />
+          <ProjectPicker projects={projects} activeId={projectId} onSwitch={switchProject} onCreate={addProject} onRename={renameActiveProject} onDelete={deleteActiveProject} deletingDisabled={rolling} />
         }
       />
 

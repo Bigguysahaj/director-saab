@@ -7,11 +7,13 @@ import {
   createMember,
   deleteMember,
   loadCast,
+  transferMember,
   updateMember,
   urlToDataUrl,
   type CastMember,
   type CastMemberShot,
 } from "@/lib/cast";
+import { loadProjects, type Project } from "@/lib/projects";
 import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
 import { CastColorMark } from "./CastColorMark";
 
@@ -63,8 +65,20 @@ function cropGrid(gridImage: string, cost: number): Promise<Record<string, CastM
  * /screen-test (src/components/screen-test/ScreenTest.tsx).
  */
 
+// One unreadable project shouldn't hide the rest, so each failure counts as no cast.
+async function loadOtherCast(projects: Project[], activeId: string) {
+  const lists = await Promise.all(projects.filter((p) => p.id !== activeId).map((project) =>
+    loadCast(project.id).then((members) => members.map((member) => ({ project, member })), () => [])));
+  return lists.flat();
+}
+
 export function Audition() {
   const [cast, setCast] = useState<CastMember[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [available, setAvailable] = useState<{ project: Project; member: CastMember }[]>([]);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [castError, setCastError] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [addingFromSheet, setAddingFromSheet] = useState(false);
 
@@ -74,16 +88,23 @@ export function Audition() {
     // only an effect, not a lazy useState initializer, avoids a hydration
     // mismatch here.
     let cancelled = false;
-    loadCast().then((loaded) => {
-      if (!cancelled) setCast(loaded);
-    });
+    loadProjects().then(async ({ projects, activeId }) => {
+      const loaded = await loadCast(activeId);
+      if (cancelled) return;
+      setProjects(projects);
+      setProjectId(activeId);
+      setCast(loaded);
+      const others = await loadOtherCast(projects, activeId);
+      if (!cancelled) setAvailable(others);
+    }).catch((err) => { if (!cancelled) setCastError(err instanceof Error ? err.message : "Couldn't load cast"); });
     return () => {
       cancelled = true;
     };
   }, []);
 
   async function addMember() {
-    const member = await createMember(`Cast ${cast.length + 1}`);
+    if (!projectId) return;
+    const member = await createMember(`Cast ${cast.length + 1}`, projectId);
     setCast((prev) => [...prev, member]);
   }
 
@@ -91,7 +112,7 @@ export function Audition() {
     id: string,
     patch: { name?: string; photo?: string; shots?: Record<string, CastMemberShot> }
   ) {
-    const updated = await updateMember(id, patch);
+    const updated = await updateMember(id, patch, projectId ?? undefined);
     setCast((prev) => prev.map((c) => (c.id === id ? updated : c)));
   }
 
@@ -102,7 +123,7 @@ export function Audition() {
   }
 
   async function handleDelete(id: string) {
-    await deleteMember(id);
+    await deleteMember(id, projectId ?? undefined);
     setCast((prev) => prev.filter((c) => c.id !== id));
   }
 
@@ -127,6 +148,18 @@ export function Audition() {
     setGeneratingId(null);
   }
 
+  async function handleTransfer(sourceId: string, memberId: string, targetId: string, mode: "copy" | "move") {
+    if (!projectId || transferBusy) return;
+    setTransferBusy(true);
+    setCastError(null);
+    try {
+      await transferMember(sourceId, memberId, targetId, mode);
+      setCast(await loadCast(projectId));
+      setAvailable(await loadOtherCast(projects, projectId));
+    } catch (err) { setCastError(err instanceof Error ? err.message : "Transfer failed"); }
+    finally { setTransferBusy(false); }
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="mb-8 flex items-center justify-between">
@@ -139,12 +172,14 @@ export function Audition() {
         <div className="flex shrink-0 gap-2 whitespace-nowrap">
           <button
             onClick={() => setAddingFromSheet(true)}
+            disabled={!projectId || transferBusy}
             className="rounded-full border border-border px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
           >
             + Add from sheet
           </button>
           <button
             onClick={addMember}
+            disabled={!projectId || transferBusy}
             className="rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg"
           >
             + New cast member
@@ -163,10 +198,23 @@ export function Audition() {
         />
       )}
 
-      {cast.length === 0 && !addingFromSheet && (
+      {castError && <p role="alert" className="mb-4 text-sm text-warn">{castError}</p>}
+      {projectId && cast.length === 0 && !addingFromSheet && (
         <p className="text-[11px] uppercase tracking-[0.2em] text-fg-faint">No cast yet — add one to get started.</p>
       )}
 
+      {projectId && cast.length === 0 && !addingFromSheet && available.length > 0 && (
+        <section aria-label="Cast from other projects" className="my-6 flex flex-col gap-3">
+          <h2 className="text-sm text-fg">Bring cast from another project</h2>
+          {available.map(({ project, member }) => (
+            <div key={`${project.id}-${member.id}`} data-testid="available-cast" className="flex items-center gap-4 rounded-xl border border-border bg-bg-panel p-4">
+              {(member.photo || member.sheet) && <img src={member.photo || member.sheet} alt={member.name} className="h-12 w-12 rounded-lg object-cover" /> /* eslint-disable-line @next/next/no-img-element */}
+              <div className="flex-1 text-sm text-fg">{member.name}<p className="text-xs text-fg-dim">{project.name}</p></div>
+              <button type="button" disabled={transferBusy} onClick={() => void handleTransfer(project.id, member.id, projectId, "copy")} className="rounded-full border border-accent px-3 py-2 text-xs text-accent disabled:opacity-40">Bring in</button>
+            </div>
+          ))}
+        </section>
+      )}
       <div className="flex flex-col gap-6">
         {cast.map((member) => (
           <CastCard
@@ -177,6 +225,9 @@ export function Audition() {
             onPhoto={(file) => handlePhoto(member.id, file)}
             onGenerate={() => generateSheet(member)}
             onDelete={() => handleDelete(member.id)}
+            destinations={projects.filter((p) => p.id !== projectId)}
+            transferBusy={transferBusy || generatingId !== null || addingFromSheet}
+            onTransfer={(targetId, mode) => projectId ? handleTransfer(projectId, member.id, targetId, mode) : Promise.resolve()}
           />
         ))}
       </div>
@@ -191,6 +242,9 @@ function CastCard({
   onPhoto,
   onGenerate,
   onDelete,
+  destinations,
+  transferBusy,
+  onTransfer,
 }: {
   member: CastMember;
   generating: boolean;
@@ -198,7 +252,11 @@ function CastCard({
   onPhoto: (file: File | null) => void;
   onGenerate: () => void;
   onDelete: () => void;
+  destinations: Project[];
+  transferBusy: boolean;
+  onTransfer: (targetId: string, mode: "copy" | "move") => Promise<void>;
 }) {
+  const [targetId, setTargetId] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const spent = Object.values(member.shots).reduce((sum, s) => sum + s.cost, 0);
   const hasShots = Object.keys(member.shots).length > 0;
@@ -218,6 +276,7 @@ function CastCard({
           <div className="flex flex-col gap-2">
             <input
               value={member.name}
+              disabled={transferBusy}
               onChange={(e) => onRename(e.target.value)}
               className="bg-transparent text-sm text-fg outline-none"
             />
@@ -230,6 +289,7 @@ function CastCard({
             />
             <button
               onClick={() => fileRef.current?.click()}
+              disabled={transferBusy}
               className="w-fit rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
             >
               {member.photo ? "Change photo" : "Upload photo"}
@@ -244,6 +304,7 @@ function CastCard({
           </span>
           <button
             onClick={onDelete}
+            disabled={transferBusy}
             className="text-[10px] uppercase tracking-[0.2em] text-fg-faint transition-colors hover:text-accent"
           >
             Remove
@@ -251,10 +312,22 @@ function CastCard({
         </div>
       </div>
 
+      {destinations.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-fg-dim">
+          <label className="flex items-center gap-2">Destination project
+            <select value={targetId} onChange={(e) => setTargetId(e.target.value)} disabled={transferBusy} className="rounded-lg border border-border bg-bg px-2 py-2 text-fg">
+              <option value="">Choose project</option>
+              {destinations.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <button type="button" disabled={!targetId || transferBusy} onClick={() => void onTransfer(targetId, "copy")} className="rounded-full border border-border px-3 py-2 disabled:opacity-40">Copy to project</button>
+          <button type="button" disabled={!targetId || transferBusy} onClick={() => void onTransfer(targetId, "move")} className="rounded-full border border-border px-3 py-2 disabled:opacity-40">Move to project</button>
+        </div>
+      )}
       {member.photo && (
         <button
           onClick={onGenerate}
-          disabled={generating}
+          disabled={generating || transferBusy}
           className="mt-4 rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40"
         >
           {generating ? "Generating…" : hasShots ? "Regenerate sheet" : "Generate character sheet"}

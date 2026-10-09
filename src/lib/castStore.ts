@@ -1,7 +1,9 @@
 import "server-only";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { projectDir } from "./projectStore";
+import { randomUUID } from "node:crypto";
+import { writeJson } from "./writeJson";
+import { projectDir, resolveProjectId } from "./projectStore";
 
 /**
  * Cast persistence on disk under .data/projects/<project>/cast/ (gitignored;
@@ -57,7 +59,7 @@ export async function readRoster(projectId: string): Promise<StoredCastMember[]>
 
 async function writeRoster(projectId: string, roster: StoredCastMember[]): Promise<void> {
   await mkdir(castDir(projectId), { recursive: true });
-  await writeFile(rosterPath(projectId), JSON.stringify(roster, null, 2));
+  await writeJson(rosterPath(projectId), roster);
 }
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -190,4 +192,38 @@ export function toClientMember(projectId: string, m: StoredCastMember) {
     sheet: m.sheet ? file(m.sheet) : "",
     closeup: m.closeup ? file(m.closeup) : "",
   };
+}
+
+export class CastMemberNotFoundError extends Error {
+  constructor(id: string) { super(`Cast member ${id} not found`); }
+}
+
+/** Save a complete independent copy before removing anything from the source. */
+export async function transferMember(
+  sourceProjectId: string, id: string, targetProjectId: string, mode: "copy" | "move",
+): Promise<StoredCastMember> {
+  if (mode !== "copy" && mode !== "move") throw new Error("Choose copy or move");
+  await resolveProjectId(sourceProjectId);
+  await resolveProjectId(targetProjectId);
+  if (sourceProjectId === targetProjectId) throw new Error("Choose a different destination project");
+  const source = await readRoster(sourceProjectId);
+  const member = source.find((m) => m.id === id);
+  if (!member) throw new CastMemberNotFoundError(id);
+  const target = await readRoster(targetProjectId);
+  const transferred = { ...member, id: `cast-${randomUUID()}`, stageColor: null };
+  const dir = memberDir(targetProjectId, transferred.id);
+  const files = new Set([member.photo, member.sheet, member.closeup, ...Object.values(member.shots).map((s) => s.file)].filter((f): f is string => !!f));
+  await mkdir(dir, { recursive: true });
+  try {
+    for (const filename of files) {
+      const safe = safeSegment("filename", filename);
+      await copyFile(path.join(memberDir(sourceProjectId, id), safe), path.join(dir, safe));
+    }
+    await writeRoster(targetProjectId, [...target, transferred]);
+  } catch (err) {
+    await rm(dir, { recursive: true, force: true });
+    throw err;
+  }
+  if (mode === "move") await deleteMember(sourceProjectId, id);
+  return transferred;
 }

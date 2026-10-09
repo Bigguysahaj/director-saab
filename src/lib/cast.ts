@@ -36,14 +36,17 @@ export async function urlToDataUrl(url: string): Promise<string> {
   return blobToDataUrl(await res.blob());
 }
 
-export async function loadCast(): Promise<CastMember[]> {
-  const res = await fetch("/api/cast");
-  if (!res.ok) return [];
+export async function loadCast(projectId?: string): Promise<CastMember[]> {
+  const res = await fetch(projectId ? `/api/cast?project=${encodeURIComponent(projectId)}` : "/api/cast");
+  if (!res.ok) {
+    if (!projectId) return [];
+    throw new Error("Failed to load cast");
+  }
   return res.json();
 }
 
-export async function createMember(name: string): Promise<CastMember> {
-  const res = await fetch("/api/cast", {
+export async function createMember(name: string, projectId?: string): Promise<CastMember> {
+  const res = await fetch(projectId ? `/api/cast?project=${encodeURIComponent(projectId)}` : "/api/cast", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
@@ -61,9 +64,10 @@ export async function updateMember(
     stageColor?: string | null;
     sheet?: string; // data URL
     closeup?: string; // data URL
-  }
+  },
+  projectId?: string,
 ): Promise<CastMember> {
-  const res = await fetch(`/api/cast/${id}`, {
+  const res = await fetch(`/api/cast/${id}${projectId ? `?project=${encodeURIComponent(projectId)}` : ""}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -72,6 +76,15 @@ export async function updateMember(
   return res.json();
 }
 
-export async function deleteMember(id: string): Promise<void> {
-  await fetch(`/api/cast/${id}`, { method: "DELETE" });
+export async function deleteMember(id: string, projectId?: string): Promise<void> {
+  await fetch(`/api/cast/${id}${projectId ? `?project=${encodeURIComponent(projectId)}` : ""}`, { method: "DELETE" });
+}
+
+export async function transferMember(sourceProjectId: string, id: string, targetProjectId: string, mode: "copy" | "move"): Promise<CastMember> {
+  const res = await fetch(`/api/cast/${encodeURIComponent(id)}?project=${encodeURIComponent(sourceProjectId)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetProjectId, mode }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Failed to transfer cast");
+  return data;
 }
