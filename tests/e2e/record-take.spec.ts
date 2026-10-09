@@ -15,7 +15,8 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   // CI's software WebGL.
   const STARTS = { timeout: 30_000 };
 
-  await page.getByRole("button", { name: "Record take", exact: true }).click();
+  await page.getByText("Record ▾", { exact: true }).click();
+  await page.getByRole("button", { name: "Take", exact: true }).click();
   await expect(stop).toBeVisible(STARTS);
   const takeClip = page.waitForEvent("download");
   await stop.click();
@@ -24,7 +25,8 @@ test("a take stopped early doesn't cut off the next manual recording", async ({ 
   // bites once the timeline (TIMELINE_DURATION = 8s) has finished.
   await page.waitForTimeout(9000);
 
-  await page.getByRole("button", { name: "Record clip", exact: true }).click();
+  await page.getByText("Record ▾", { exact: true }).click();
+  await page.getByRole("button", { name: "Clip", exact: true }).click();
   await expect(stop).toBeVisible(STARTS);
   // Long enough for the old bug's effect to have stopped it.
   await page.waitForTimeout(1500);
