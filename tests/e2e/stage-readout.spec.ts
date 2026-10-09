@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { STAGE_LAYOUT_KEY } from "../../src/lib/stageSnapshots";
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -29,9 +30,9 @@ test("readout clears the toolbar on a narrow window", async ({ page }) => {
 
 test("readout rides the toolbar row with and without the Timeline", async ({ page }) => {
   // A light isn't keyframable, so selecting it shows the readout with the dock on the floor.
-  await page.addInitScript(() => {
-    localStorage.setItem("director-stage-layout-v3", JSON.stringify([{ id: 0, kind: "light", position: [0, 0, 0], rotation: [0, 0, 0] }]));
-  });
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, JSON.stringify([{ id: 0, kind: "light", position: [0, 0, 0], rotation: [0, 0, 0] }]));
+  }, STAGE_LAYOUT_KEY);
   await page.goto("/stage");
   const canvas = page.locator("canvas").first();
   await expect(canvas).toBeVisible();
