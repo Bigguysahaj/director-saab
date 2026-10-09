@@ -1698,292 +1698,317 @@ export function StageScene() {
 
       {/* Bottom dock: the toolbar sits on the floor and lifts only when the Timeline renders under it */}
       <div className="pointer-events-none absolute inset-x-6 bottom-4 flex flex-col items-start gap-3 [&>*]:pointer-events-auto">
-        {/* Rule of 3: Build (gizmo, add, cast) · Camera · Set */}
-        <div className="flex items-end gap-6">
-          <div className="flex items-end gap-1" aria-label="Build">
-            <div className="flex rounded-full border border-border bg-bg-panel p-1">
-              {(["translate", "rotate"] as const).map((mode) => (
+        {/* Toolbar row; the readout wraps to its own line rather than overlap when space runs out */}
+        <div className="!pointer-events-none flex w-full flex-wrap items-end gap-x-6 gap-y-2 [&>*]:pointer-events-auto">
+          {/* Rule of 3: Build (gizmo, add, cast) · Camera · Set */}
+          <div className="flex items-end gap-6">
+            <div className="flex items-end gap-1" aria-label="Build">
+              <div className="flex rounded-full border border-border bg-bg-panel p-1">
+                {(["translate", "rotate"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setGizmoMode(mode)}
+                    title="Toggle with R"
+                    className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                      effectiveGizmoMode === mode ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                    }`}
+                  >
+                    {mode === "translate" ? "Move" : "Rotate"}
+                  </button>
+                ))}
+                {selected?.kind === "mannequin" && (
+                  <button
+                    onClick={() => { setIsPlaying(false); setGizmoMode("pose"); }}
+                    title="Select body parts, adjust joints, or apply a preset pose"
+                    className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                      effectiveGizmoMode === "pose" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                    }`}
+                  >
+                    Pose
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                {inventoryOpen && (
+                  <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
+                    <div className="flex items-center gap-2">
+                      {([
+                        ["Size", newSize, setNewSize],
+                        ["L", newLength, setNewLength],
+                        ["B", newBreadth, setNewBreadth],
+                      ] as const).map(([label, value, setValue]) => (
+                        <span key={label} className="flex items-center gap-1 rounded-full border border-border py-1 pl-3 pr-1">
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                          <input
+                            type="number"
+                            min={0.2}
+                            max={2}
+                            step={0.1}
+                            value={value}
+                            onChange={(e) => setValue(Number(e.target.value) || DEFAULT_SIZE.box)}
+                            className="w-11 rounded-full bg-transparent px-1 py-1 text-[10px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {([
+                        ["box", "Box"],
+                        ["ball", "Ball"],
+                        ["purse", "Purse"],
+                        ["mannequin", "Mannequin"],
+                      ] as const).map(([kind, label]) => (
+                        <button
+                          key={kind}
+                          onClick={() => addFromInventory(kind)}
+                          className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+                        >
+                          + {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button
-                  key={mode}
-                  onClick={() => setGizmoMode(mode)}
-                  title="Toggle with R"
-                  className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                    effectiveGizmoMode === mode ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                  onClick={() => setInventoryOpen((v) => !v)}
+                  className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                    inventoryOpen
+                      ? "border-accent bg-accent text-bg"
+                      : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
                   }`}
                 >
-                  {mode === "translate" ? "Move" : "Rotate"}
+                  {inventoryOpen ? "× Add" : "+ Add"}
                 </button>
-              ))}
-              {selected?.kind === "mannequin" && (
-                <button
-                  onClick={() => { setIsPlaying(false); setGizmoMode("pose"); }}
-                  title="Select body parts, adjust joints, or apply a preset pose"
-                  className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                    effectiveGizmoMode === "pose" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
-                  }`}
-                >
-                  Pose
-                </button>
-              )}
+              </div>
+              <CastPanel
+                open={castOpen}
+                onToggle={() => setCastOpen((v) => !v)}
+                canAssign={selected?.kind === "mannequin"}
+                assignedId={selected?.kind === "mannequin" ? (selected.castId ?? null) : null}
+                mannequinColor={selected?.kind === "mannequin" ? (selected.color ?? DEFAULT_MANNEQUIN_COLOR) : DEFAULT_MANNEQUIN_COLOR}
+                onAssign={(castId) => {
+                  if (!selected || selected.kind !== "mannequin") return;
+                  setObjects((prev) => prev.map((o) => (o.id === selected.id ? { ...o, castId: castId ?? undefined } : o)));
+                }}
+              />
             </div>
+
+            {cameraObj && (
+              <div className="flex items-end gap-1" aria-label="Camera">
+                <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
+                  <button
+                    onClick={() => setLookingThrough((v) => !v)}
+                    className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                      lookingThrough ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                    }`}
+                  >
+                    {lookingThrough ? "Exit view" : "View"}
+                  </button>
+                  <button
+                    onClick={() => setFrameLock((v) => !v)}
+                    aria-pressed={frameLock}
+                    title="Lock camera view, photos and recordings to a vertical 9:16 frame"
+                    className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                      frameLock ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                    }`}
+                  >
+                    9:16
+                  </button>
+                  <details data-menu className="relative">
+                    <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Capture ▾</summary>
+                    <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
+                      <button
+                        onClick={capturePhoto}
+                        className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                      >
+                        Photo
+                      </button>
+                      <button
+                        onClick={() => writeExportKeypoints(!exportKeypoints)}
+                        aria-pressed={exportKeypoints}
+                        title="Also download the mannequins' joint keypoints (stage-photo-<ts>.json) with each photo, as ground truth for the Screen Test eval"
+                        className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                          exportKeypoints ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                        }`}
+                      >
+                        + Keypoints
+                      </button>
+                    </div>
+                  </details>
+                  {isRecording ? (
+                    // Stop stays one click away, never tucked in a menu.
+                    <button onClick={toggleRecording} className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors bg-accent text-bg font-medium">
+                      ● Stop recording
+                    </button>
+                  ) : (
+                    <details data-menu className="relative">
+                      <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Record ▾</summary>
+                      <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
+                        <button
+                          onClick={toggleRecording}
+                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                        >
+                          Clip
+                        </button>
+                        <button
+                          onClick={recordTake}
+                          title="Plays the timeline from 0 while recording and stops at the end"
+                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                        >
+                          Take
+                        </button>
+                      </div>
+                    </details>
+                  )}
+                </div>
             <div className="relative">
-              {inventoryOpen && (
+              {cameraMovesOpen && (
                 <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
-                  <div className="flex items-center gap-2">
-                    {([
-                      ["Size", newSize, setNewSize],
-                      ["L", newLength, setNewLength],
-                      ["B", newBreadth, setNewBreadth],
-                    ] as const).map(([label, value, setValue]) => (
-                      <span key={label} className="flex items-center gap-1 rounded-full border border-border py-1 pl-3 pr-1">
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
-                        <input
-                          type="number"
-                          min={0.2}
-                          max={2}
-                          step={0.1}
-                          value={value}
-                          onChange={(e) => setValue(Number(e.target.value) || DEFAULT_SIZE.box)}
-                          className="w-11 rounded-full bg-transparent px-1 py-1 text-[10px] text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                      </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Hold</span>
+                    {MOVE_ROWS.map(([negKind, posKind, label]) => (
+                      <div key={label} className="flex items-center gap-1">
+                        <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                        {[negKind, posKind].map((kind) => (
+                          <button
+                            key={kind}
+                            onMouseDown={() => startHold(kind)}
+                            onMouseUp={() => stopHold(kind)}
+                            onMouseLeave={() => stopHold(kind)}
+                            className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                              activeHoldKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                            }`}
+                          >
+                            {MOVE_SHORT_LABELS[kind]}
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </div>
-                  <div className="flex items-center gap-1">
-                    {([
-                      ["box", "Box"],
-                      ["ball", "Ball"],
-                      ["purse", "Purse"],
-                      ["mannequin", "Mannequin"],
-                    ] as const).map(([kind, label]) => (
-                      <button
-                        key={kind}
-                        onClick={() => addFromInventory(kind)}
-                        className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-                      >
-                        + {label}
-                      </button>
+                  <div className="flex flex-col gap-1 border-t border-border pt-2">
+                    <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Whip</span>
+                    {WHIP_ROWS.map(([negKind, posKind, label]) => (
+                      <div key={label} className="flex items-center gap-1">
+                        <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
+                        {[negKind, posKind].map((kind) => (
+                          <button
+                            key={kind}
+                            onClick={() => startWhip(kind)}
+                            className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                              activeWhipKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
+                            }`}
+                          >
+                            {WHIP_SHORT_LABELS[kind]}
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
               <button
-                onClick={() => setInventoryOpen((v) => !v)}
+                onClick={() => setCameraMovesOpen((v) => !v)}
                 className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                  inventoryOpen
+                  cameraMovesOpen
                     ? "border-accent bg-accent text-bg"
                     : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
                 }`}
               >
-                {inventoryOpen ? "× Add" : "+ Add"}
+                {cameraMovesOpen ? "× Camera moves" : "+ Camera moves"}
               </button>
             </div>
-            <CastPanel
-              open={castOpen}
-              onToggle={() => setCastOpen((v) => !v)}
-              canAssign={selected?.kind === "mannequin"}
-              assignedId={selected?.kind === "mannequin" ? (selected.castId ?? null) : null}
-              mannequinColor={selected?.kind === "mannequin" ? (selected.color ?? DEFAULT_MANNEQUIN_COLOR) : DEFAULT_MANNEQUIN_COLOR}
-              onAssign={(castId) => {
-                if (!selected || selected.kind !== "mannequin") return;
-                setObjects((prev) => prev.map((o) => (o.id === selected.id ? { ...o, castId: castId ?? undefined } : o)));
-              }}
-            />
-          </div>
-
-          {cameraObj && (
-            <div className="flex items-end gap-1" aria-label="Camera">
-              <div className="flex items-center gap-1 rounded-full border border-border bg-bg-panel p-1">
-                <button
-                  onClick={() => setLookingThrough((v) => !v)}
-                  className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                    lookingThrough ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
-                  }`}
-                >
-                  {lookingThrough ? "Exit view" : "View"}
-                </button>
-                <button
-                  onClick={() => setFrameLock((v) => !v)}
-                  aria-pressed={frameLock}
-                  title="Lock camera view, photos and recordings to a vertical 9:16 frame"
-                  className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                    frameLock ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
-                  }`}
-                >
-                  9:16
-                </button>
-                <details data-menu className="relative">
-                  <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Capture ▾</summary>
-                  <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
-                    <button
-                      onClick={capturePhoto}
-                      className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
-                    >
-                      Photo
-                    </button>
-                    <button
-                      onClick={() => writeExportKeypoints(!exportKeypoints)}
-                      aria-pressed={exportKeypoints}
-                      title="Also download the mannequins' joint keypoints (stage-photo-<ts>.json) with each photo, as ground truth for the Screen Test eval"
-                      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                        exportKeypoints ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
-                      }`}
-                    >
-                      + Keypoints
-                    </button>
-                  </div>
-                </details>
-                {isRecording ? (
-                  // Stop stays one click away, never tucked in a menu.
-                  <button onClick={toggleRecording} className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors bg-accent text-bg font-medium">
-                    ● Stop recording
-                  </button>
-                ) : (
-                  <details data-menu className="relative">
-                    <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Record ▾</summary>
-                    <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
-                      <button
-                        onClick={toggleRecording}
-                        className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
-                      >
-                        Clip
-                      </button>
-                      <button
-                        onClick={recordTake}
-                        title="Plays the timeline from 0 while recording and stops at the end"
-                        className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
-                      >
-                        Take
-                      </button>
-                    </div>
-                  </details>
-                )}
-              </div>
-          <div className="relative">
-            {cameraMovesOpen && (
-              <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-2 rounded-2xl border border-border bg-bg-panel p-3">
-                <div className="flex flex-col gap-1">
-                  <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Hold</span>
-                  {MOVE_ROWS.map(([negKind, posKind, label]) => (
-                    <div key={label} className="flex items-center gap-1">
-                      <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
-                      {[negKind, posKind].map((kind) => (
-                        <button
-                          key={kind}
-                          onMouseDown={() => startHold(kind)}
-                          onMouseUp={() => stopHold(kind)}
-                          onMouseLeave={() => stopHold(kind)}
-                          className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                            activeHoldKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
-                          }`}
-                        >
-                          {MOVE_SHORT_LABELS[kind]}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-1 border-t border-border pt-2">
-                  <span className="pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">Whip</span>
-                  {WHIP_ROWS.map(([negKind, posKind, label]) => (
-                    <div key={label} className="flex items-center gap-1">
-                      <span className="w-20 pl-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">{label}</span>
-                      {[negKind, posKind].map((kind) => (
-                        <button
-                          key={kind}
-                          onClick={() => startWhip(kind)}
-                          className={`rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                            activeWhipKind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:border-accent hover:text-fg"
-                          }`}
-                        >
-                          {WHIP_SHORT_LABELS[kind]}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
-            <button
-              onClick={() => setCameraMovesOpen((v) => !v)}
-              className={`rounded-full border px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                cameraMovesOpen
-                  ? "border-accent bg-accent text-bg"
-                  : "border-border bg-bg-panel text-fg-dim hover:border-accent hover:text-fg"
-              }`}
-            >
-              {cameraMovesOpen ? "× Camera moves" : "+ Camera moves"}
-            </button>
-          </div>
-            </div>
-          )}
 
-          <details data-menu className="relative">
-            <summary className="block cursor-pointer list-none rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg [&::-webkit-details-marker]:hidden">
-              Set ⋯
-            </summary>
-            <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
-              <span className="pl-3 text-[10px] uppercase tracking-[0.2em] text-fg-faint">Backdrop</span>
-              <div className="flex items-center gap-1" aria-label="Backdrop">
-                {(["plain", "green"] as const).map((kind) => (
-                  <button
-                    key={kind}
-                    onClick={() => setBackdrop({ kind })}
-                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                      backdrop.kind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+            <details data-menu className="relative">
+              <summary className="block cursor-pointer list-none rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg [&::-webkit-details-marker]:hidden">
+                Set ⋯
+              </summary>
+              <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
+                <span className="pl-3 text-[10px] uppercase tracking-[0.2em] text-fg-faint">Backdrop</span>
+                <div className="flex items-center gap-1" aria-label="Backdrop">
+                  {(["plain", "green"] as const).map((kind) => (
+                    <button
+                      key={kind}
+                      onClick={() => setBackdrop({ kind })}
+                      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                        backdrop.kind === kind ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
+                      }`}
+                    >
+                      {kind === "plain" ? "Plain" : "Green screen"}
+                    </button>
+                  ))}
+                  <label
+                    className={`cursor-pointer rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
+                      backdrop.kind === "image" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
                     }`}
                   >
-                    {kind === "plain" ? "Plain" : "Green screen"}
-                  </button>
-                ))}
-                <label
-                  className={`cursor-pointer rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                    backdrop.kind === "image" ? "bg-accent text-bg font-medium" : "text-fg-dim hover:text-fg"
-                  }`}
+                    Image…
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setBackdrop({ kind: "image", url: URL.createObjectURL(file) });
+                        e.target.value = "";
+                        closeMenu(e.target);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="w-full border-t border-border" />
+                <button
+                  onClick={exportScene}
+                  className="whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
                 >
-                  Image…
+                  Export scene
+                </button>
+                <label className="cursor-pointer whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg">
+                  Import scene
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="application/json,.json"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) setBackdrop({ kind: "image", url: URL.createObjectURL(file) });
+                      if (file) importScene(file);
                       e.target.value = "";
                       closeMenu(e.target);
                     }}
                   />
                 </label>
+                <button
+                  onClick={resetLayout}
+                  className="whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                >
+                  Reset layout
+                </button>
               </div>
-              <div className="w-full border-t border-border" />
-              <button
-                onClick={exportScene}
-                className="whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
-              >
-                Export scene
-              </button>
-              <label className="cursor-pointer whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg">
-                Import scene
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) importScene(file);
-                    e.target.value = "";
-                    closeMenu(e.target);
-                  }}
-                />
-              </label>
-              <button
-                onClick={resetLayout}
-                className="whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
-              >
-                Reset layout
-              </button>
+            </details>
+          </div>
+
+          {selected && selectedDisplay && (
+            <div className="ml-auto flex flex-col items-end gap-1 text-right">
+              {canDuplicate && (
+                <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
+              )}
+              {effectiveGizmoMode === "pose" ? (
+                effectiveActiveJoint ? (
+                  <TransformReadout
+                    mode="rotate"
+                    position={[0, 0, 0]}
+                    rotation={(selectedPose ?? DEFAULT_POSE)[effectiveActiveJoint]}
+                    label={JOINT_LABELS[effectiveActiveJoint]}
+                  />
+                ) : (
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">click a joint to pose it</p>
+                )
+              ) : (
+                <TransformReadout mode={effectiveGizmoMode} position={selectedDisplay.position} rotation={selectedDisplay.rotation} />
+              )}
             </div>
-          </details>
+          )}
         </div>
 
         {selected && canKeyframeSelection && (
@@ -2008,28 +2033,6 @@ export function StageScene() {
       {selected?.kind === "mannequin" && effectiveGizmoMode === "pose" && !isPlaying && (
         <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selectedPose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
           onChange={(pose) => writeSelectedPose(() => pose)} />
-      )}
-
-      {selected && selectedDisplay && (
-        <div className="absolute bottom-20 right-6 flex flex-col items-end gap-1">
-          {canDuplicate && (
-            <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
-          )}
-          {effectiveGizmoMode === "pose" ? (
-            effectiveActiveJoint ? (
-              <TransformReadout
-                mode="rotate"
-                position={[0, 0, 0]}
-                rotation={(selectedPose ?? DEFAULT_POSE)[effectiveActiveJoint]}
-                label={JOINT_LABELS[effectiveActiveJoint]}
-              />
-            ) : (
-              <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">click a joint to pose it</p>
-            )
-          ) : (
-            <TransformReadout mode={effectiveGizmoMode} position={selectedDisplay.position} rotation={selectedDisplay.rotation} />
-          )}
-        </div>
       )}
     </div>
   );
