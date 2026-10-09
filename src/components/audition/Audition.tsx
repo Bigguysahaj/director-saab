@@ -13,6 +13,7 @@ import {
   type CastMemberShot,
 } from "@/lib/cast";
 import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
+import { CastColorMark } from "./CastColorMark";
 
 function fileToDataUrl(file: File): Promise<string> {
   return blobToDataUrl(file);
@@ -237,6 +238,7 @@ function CastCard({
         </div>
 
         <div className="flex flex-col items-end gap-2">
+          <CastColorMark color={member.stageColor} />
           <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
             est. ${CHARACTER_SHEET_COST.toFixed(2)}
           </span>
