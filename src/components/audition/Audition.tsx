@@ -5,6 +5,7 @@ import { CHARACTER_SHEET_COST, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/ch
 import { blobToDataUrl, createMember, deleteMember, loadCast, updateMember, type CastMember, type CastMemberShot } from "@/lib/cast";
 import { colorLabel } from "@/lib/stageColors";
 import type { ScreenTestCastRef } from "@/lib/screenTest";
+import { CastColorMark } from "./CastColorMark";
 import type { ImageModel } from "@/lib/types";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -294,6 +295,7 @@ function CastCard({
         </div>
 
         <div className="flex flex-col items-end gap-2">
+          <CastColorMark color={member.stageColor} />
           <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
             est. ${CHARACTER_SHEET_COST.toFixed(2)}
           </span>
