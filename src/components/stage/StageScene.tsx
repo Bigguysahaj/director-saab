@@ -1163,6 +1163,23 @@ export function StageScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Toolbar menus are native <details>: close them on an outside click or
+  // Escape, which also keeps only one open (opening another is an outside click).
+  useEffect(() => {
+    const closeAll = (except?: Element | null) =>
+      document.querySelectorAll<HTMLDetailsElement>("details[data-menu][open]").forEach((d) => {
+        if (d !== except) d.open = false;
+      });
+    const onPointerDown = (e: PointerEvent) => closeAll((e.target as Element).closest("details[data-menu]"));
+    const onKeyDown = (e: KeyboardEvent) => e.key === "Escape" && closeAll();
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   // Auto-save on every change (drag, rotate, pose, keyframe, add, duplicate).
   useEffect(() => {
     try {
@@ -1179,6 +1196,16 @@ export function StageScene() {
       mediaRecorder.current.stop();
     }
   }, [lookingThrough]);
+
+  function closeMenu(el: Element) {
+    const menu = el.closest("details");
+    if (menu) menu.open = false;
+  }
+
+  /** Picking a menu action closes the menu; on/off toggles (aria-pressed) leave it open. */
+  function closeMenuOnPick(e: React.MouseEvent<HTMLElement>) {
+    if ((e.target as Element).closest("button:not([aria-pressed])")) closeMenu(e.currentTarget);
+  }
 
   /** Whole scene as JSON (the same objects array the layout persists), so a
    * shot can be authored by hand or by an LLM/agent and loaded back in. */
@@ -1785,9 +1812,9 @@ export function StageScene() {
                 >
                   9:16
                 </button>
-                <details className="relative">
+                <details data-menu className="relative">
                   <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Capture ▾</summary>
-                  <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2">
+                  <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
                     <button
                       onClick={capturePhoto}
                       className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
@@ -1812,9 +1839,9 @@ export function StageScene() {
                     ● Stop recording
                   </button>
                 ) : (
-                  <details className="relative">
+                  <details data-menu className="relative">
                     <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Record ▾</summary>
-                    <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2">
+                    <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
                       <button
                         onClick={toggleRecording}
                         className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
@@ -1891,11 +1918,11 @@ export function StageScene() {
             </div>
           )}
 
-          <details className="relative">
+          <details data-menu className="relative">
             <summary className="block cursor-pointer list-none rounded-full border border-border bg-bg-panel px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg [&::-webkit-details-marker]:hidden">
               Set ⋯
             </summary>
-            <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2">
+            <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
               <span className="pl-3 text-[10px] uppercase tracking-[0.2em] text-fg-faint">Backdrop</span>
               <div className="flex items-center gap-1" aria-label="Backdrop">
                 {(["plain", "green"] as const).map((kind) => (
@@ -1923,6 +1950,7 @@ export function StageScene() {
                       const file = e.target.files?.[0];
                       if (file) setBackdrop({ kind: "image", url: URL.createObjectURL(file) });
                       e.target.value = "";
+                      closeMenu(e.target);
                     }}
                   />
                 </label>
@@ -1944,6 +1972,7 @@ export function StageScene() {
                     const file = e.target.files?.[0];
                     if (file) importScene(file);
                     e.target.value = "";
+                    closeMenu(e.target);
                   }}
                 />
               </label>
