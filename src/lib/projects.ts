@@ -32,3 +32,21 @@ export async function setActiveProject(id: string): Promise<Project> {
   if (!res.ok) throw new Error("Failed to switch project");
   return res.json();
 }
+
+export async function renameProject(id: string, name: string): Promise<Project> {
+  const res = await fetch('/api/projects', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Failed to rename project');
+  return data;
+}
+
+export async function deleteProject(id: string): Promise<ProjectList> {
+  const res = await fetch('/api/projects', {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Failed to delete project');
+  return data;
+}

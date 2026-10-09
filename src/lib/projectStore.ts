@@ -1,6 +1,7 @@
 import "server-only";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { writeJson } from "./writeJson";
 
 /**
  * Projects on disk under .data/projects/ (gitignored). projects.json holds
@@ -54,7 +55,7 @@ async function exists(p: string): Promise<boolean> {
 
 async function writeProjects(file: ProjectsFile): Promise<void> {
   await mkdir(projectsRoot(), { recursive: true });
-  await writeFile(projectsPath(), JSON.stringify(file, null, 2));
+  await writeJson(projectsPath(), file);
 }
 
 /**
@@ -95,7 +96,7 @@ export async function createProject(rawName: string): Promise<Project> {
   if (!name || !id) throw new Error("Project name is required");
 
   const file = await readProjects();
-  if (file.projects.some((p) => p.id === id)) {
+  if (file.projects.some((p) => p.id === id || slugify(p.name) === id)) {
     throw new Error(`A project called "${name}" already exists`);
   }
 
@@ -141,4 +142,55 @@ export async function withProject(req: Request, handler: (projectId: string) => 
     throw err;
   }
   return handler(projectId);
+}
+
+/** Renames the label only, preserving paths and take references. */
+export async function renameProject(id: string, rawName: string): Promise<Project> {
+  const file = await readProjects();
+  const project = file.projects.find((p) => p.id === id);
+  if (!project) throw new ProjectNotFoundError(id);
+  const name = rawName.trim();
+  const slug = slugify(name);
+  if (!name || !slug) throw new Error("Project name is required");
+  if (file.projects.some((p) => p.id !== id && slugify(p.name) === slug)) {
+    throw new Error(`A project called "${name}" already exists`);
+  }
+  const renamed = { ...project, name };
+  await writeProjects({ ...file, projects: file.projects.map((p) => p.id === id ? renamed : p) });
+  return renamed;
+}
+
+/** Removes the project and its disk assets, then selects a surviving project. */
+export async function deleteProject(id: string): Promise<ProjectsFile> {
+  const file = await readProjects();
+  if (!file.projects.some((p) => p.id === id)) throw new ProjectNotFoundError(id);
+
+  // Take logs are stored separately, with the project ID in take.json.
+  const takes = path.join(dataRoot(), "takes");
+  const entries = await readdir(takes, { withFileTypes: true }).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(takes, entry.name);
+    let take: { project?: string };
+    try {
+      take = JSON.parse(await readFile(path.join(dir, "take.json"), "utf8"));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
+    if (take.project === id) await rm(dir, { recursive: true, force: true });
+  }
+  await rm(projectDir(id), { recursive: true, force: true });
+  let projects = file.projects.filter((p) => p.id !== id);
+  if (!projects.length) {
+    projects = [{ id: DEFAULT_PROJECT_ID, name: "Default", createdAt: Date.now() }];
+    await mkdir(projectDir(DEFAULT_PROJECT_ID), { recursive: true });
+  }
+  const activeId = file.activeId === id ? projects[0].id : file.activeId;
+  const next = { projects, activeId };
+  await writeProjects(next);
+  return next;
 }
