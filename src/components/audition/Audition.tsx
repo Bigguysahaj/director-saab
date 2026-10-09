@@ -65,6 +65,13 @@ function cropGrid(gridImage: string, cost: number): Promise<Record<string, CastM
  * /screen-test (src/components/screen-test/ScreenTest.tsx).
  */
 
+// One unreadable project shouldn't hide the rest, so each failure counts as no cast.
+async function loadOtherCast(projects: Project[], activeId: string) {
+  const lists = await Promise.all(projects.filter((p) => p.id !== activeId).map((project) =>
+    loadCast(project.id).then((members) => members.map((member) => ({ project, member })), () => [])));
+  return lists.flat();
+}
+
 export function Audition() {
   const [cast, setCast] = useState<CastMember[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -83,13 +90,12 @@ export function Audition() {
     let cancelled = false;
     loadProjects().then(async ({ projects, activeId }) => {
       const loaded = await loadCast(activeId);
-      const otherCast = await Promise.all(projects.filter((p) => p.id !== activeId).map(async (project) =>
-        (await loadCast(project.id)).map((member) => ({ project, member }))));
       if (cancelled) return;
       setProjects(projects);
       setProjectId(activeId);
       setCast(loaded);
-      setAvailable(otherCast.flat());
+      const others = await loadOtherCast(projects, activeId);
+      if (!cancelled) setAvailable(others);
     }).catch((err) => { if (!cancelled) setCastError(err instanceof Error ? err.message : "Couldn't load cast"); });
     return () => {
       cancelled = true;
@@ -148,11 +154,8 @@ export function Audition() {
     setCastError(null);
     try {
       await transferMember(sourceId, memberId, targetId, mode);
-      const loaded = await loadCast(projectId);
-      const otherCast = await Promise.all(projects.filter((p) => p.id !== projectId).map(async (project) =>
-        (await loadCast(project.id)).map((member) => ({ project, member }))));
-      setCast(loaded);
-      setAvailable(otherCast.flat());
+      setCast(await loadCast(projectId));
+      setAvailable(await loadOtherCast(projects, projectId));
     } catch (err) { setCastError(err instanceof Error ? err.message : "Transfer failed"); }
     finally { setTransferBusy(false); }
   }

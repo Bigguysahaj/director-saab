@@ -92,13 +92,17 @@ export async function listProjects(): Promise<ProjectsFile> {
 /** Creates a project and makes it the active one. */
 export async function createProject(rawName: string): Promise<Project> {
   const name = rawName.trim();
-  const id = slugify(name);
-  if (!name || !id) throw new Error("Project name is required");
+  const slug = slugify(name);
+  if (!name || !slug) throw new Error("Project name is required");
 
   const file = await readProjects();
-  if (file.projects.some((p) => p.id === id || slugify(p.name) === id)) {
+  if (file.projects.some((p) => slugify(p.name) === slug)) {
     throw new Error(`A project called "${name}" already exists`);
   }
+  // A renamed project keeps its old slug as id; stamp the new one (IST) instead.
+  const ist = new Date(Date.now() + 5.5 * 3600_000).toISOString().replace(/\D/g, "");
+  const id = file.projects.some((p) => p.id === slug) ? `${slug}-${ist.slice(0, 8)}-${ist.slice(8, 14)}` : slug;
+  if (file.projects.some((p) => p.id === id)) throw new Error("Try again in a second");
 
   const project: Project = { id, name, createdAt: Date.now() };
   await mkdir(projectDir(id), { recursive: true });
@@ -174,14 +178,9 @@ export async function deleteProject(id: string): Promise<ProjectsFile> {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const dir = path.join(takes, entry.name);
-    let take: { project?: string };
-    try {
-      take = JSON.parse(await readFile(path.join(dir, "take.json"), "utf8"));
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw err;
-    }
-    if (take.project === id) await rm(dir, { recursive: true, force: true });
+    // Skip a missing or broken take.json rather than block the delete on it.
+    const take = await readFile(path.join(dir, "take.json"), "utf8").then(JSON.parse).catch(() => null);
+    if (take?.project === id) await rm(dir, { recursive: true, force: true });
   }
   await rm(projectDir(id), { recursive: true, force: true });
   let projects = file.projects.filter((p) => p.id !== id);

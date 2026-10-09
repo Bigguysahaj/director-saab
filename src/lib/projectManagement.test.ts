@@ -110,3 +110,22 @@ it('readers always see complete project and cast records during updates', async 
   expect((await projects.listProjects()).projects[0].name).toBe('Film');
   expect((await cast.readRoster('default'))[0].name).toBe('Updated Asha');
 });
+
+it('a renamed project frees its old name for a new project', async () => {
+  const pilot = await projects.createProject('Pilot');
+  await projects.renameProject(pilot.id, 'Season 1');
+  const again = await projects.createProject('Pilot');
+  expect(again.id).toMatch(/^pilot-\d{8}-\d{6}$/);
+  expect((await projects.listProjects()).projects.map(p => p.name)).toEqual(['Default', 'Season 1', 'Pilot']);
+  await expect(projects.createProject('pilot')).rejects.toThrow(/already/i);
+});
+
+it('an unreadable or mid-write take log does not block deleting a project', async () => {
+  const { source, target } = await fixture();
+  await logSubmittedTake({ id: 'source-job', project: source.id, request: { model: 'test', prompt: 'take' } });
+  await logSubmittedTake({ id: 'target-job', project: target.id, request: { model: 'test', prompt: 'take' } });
+  await writeFile(path.join(root, 'takes', 'target-job', 'take.json'), '{"proj');
+  await projects.deleteProject(source.id);
+  await expect(stat(path.join(root, 'takes', 'source-job'))).rejects.toThrow();
+  await stat(path.join(root, 'takes', 'target-job'));
+});
