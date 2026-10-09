@@ -14,7 +14,7 @@ test("pose keys interpolate: Bow at 0 s, Neutral auto-keyed at 4 s, halfway bend
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/stage");
-  await page.getByRole("button", { name: "+ Inventory", exact: true }).click();
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
   await page.getByRole("button", { name: "+ Mannequin", exact: true }).click();
   await page.getByRole("button", { name: "Pose", exact: true }).click();
   const panel = page.getByRole("region", { name: "Mannequin pose editor" });

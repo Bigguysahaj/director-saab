@@ -64,7 +64,7 @@ async function hold(keys, ms) {
   return { before, after: await cam(), held };
 }
 const delta = ({ before, after }) => v(after.position).sub(v(before.position));
-const enterCameraView = () => page.getByRole("button", { name: "Camera view", exact: true }).click();
+const enterCameraView = () => page.getByRole("button", { name: "View", exact: true }).click();
 const exitCameraView = () => page.getByRole("button", { name: "Exit camera view" }).click();
 
 // ---------------------------------------------------------------- 1. inert outside camera view
@@ -261,7 +261,7 @@ await enterCameraView();
 await freshStage();
 await enterCameraView();
 {
-  await page.getByRole("button", { name: "+ Inventory" }).click();
+  await page.getByRole("button", { name: "+ Add" }).click();
   const input = page.locator('input[type="number"]').first();
   await input.focus();
   const before = await cam();

@@ -58,7 +58,7 @@ export function Timeline({
   const ticks = Array.from({ length: duration + 1 }, (_, i) => i);
 
   return (
-    <div className="absolute inset-x-6 bottom-4 flex items-center gap-3 rounded-full border border-border bg-bg-panel px-3 py-2">
+    <div className="flex items-center gap-3 self-stretch rounded-full border border-border bg-bg-panel px-3 py-2">
       <button
         onClick={onTogglePlay}
         className={`rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors ${
