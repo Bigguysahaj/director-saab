@@ -4,7 +4,7 @@ import { SCREEN_TEST_COST_PER_IMAGE, buildScreenTestPrompt, type ScreenTestCastR
 import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
 import { readLatestScreenTest, saveScreenTest, toClientScreenTest } from "@/lib/screenTestStore";
 
-/** Returns the last-generated Screen Test composite, if any, so /audition
+/** Returns the last-generated Screen Test composite, if any, so /screen-test
  * can show it again after a refresh without re-generating. */
 export async function GET() {
   const latest = await readLatestScreenTest();
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as {
     stagePhoto?: string; // data URL
     cast?: (ScreenTestCastRef & { photo: string })[]; // photo: data URL
-    model?: string; // OpenRouter image-model id — see the DoP picker in Audition.tsx
+    model?: string; // OpenRouter image-model id — see the DoP picker in ScreenTest.tsx
   };
   if (!body.stagePhoto) {
     return NextResponse.json({ error: "stagePhoto (data URL) is required" }, { status: 400 });

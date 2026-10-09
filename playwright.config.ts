@@ -6,6 +6,12 @@ export default defineConfig({
   // /stage on a cold dev server — 30s default is too tight for CI.
   timeout: 90_000,
   fullyParallel: true,
+  // Project management changes the server's active project; run it after
+  // the existing suite so its mutations cannot overlap those tests.
+  projects: [
+    { name: "app", testIgnore: "**/project-management.spec.ts" },
+    { name: "project-management", testMatch: "**/project-management.spec.ts", dependencies: ["app"] },
+  ],
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: "list",

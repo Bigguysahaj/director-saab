@@ -4,7 +4,7 @@ test("save, reload, apply, and delete a pose through the stage UI", async ({ pag
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/stage");
-  await page.getByRole("button", { name: "+ Inventory", exact: true }).click();
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
   await page.getByRole("button", { name: "+ Mannequin", exact: true }).click();
   await page.getByRole("button", { name: "Pose", exact: true }).click();
   const panel = page.getByRole("region", { name: "Mannequin pose editor" });
@@ -16,7 +16,7 @@ test("save, reload, apply, and delete a pose through the stage UI", async ({ pag
   await expect(panel.getByRole("status")).toHaveText("Saved My greeting.");
   await page.reload();
   // Add a different figure: the library must survive and be reusable across figures.
-  await page.getByRole("button", { name: "+ Inventory", exact: true }).click();
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
   await page.getByRole("button", { name: "+ Mannequin", exact: true }).click();
   await page.getByRole("button", { name: "Pose", exact: true }).click();
   await panel.getByRole("tab", { name: "My poses" }).click();
@@ -34,7 +34,7 @@ test("save, reload, apply, and delete a pose through the stage UI", async ({ pag
 
 test("rejects incompatible packs and accepts valid packs without losing the figure", async ({ page }) => {
   await page.goto("/stage");
-  await page.getByRole("button", { name: "+ Inventory", exact: true }).click();
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
   await page.getByRole("button", { name: "+ Mannequin", exact: true }).click();
   await page.getByRole("button", { name: "Pose", exact: true }).click();
   await page.getByLabel("Import pose pack", { exact: true }).setInputFiles({

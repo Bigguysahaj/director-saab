@@ -59,7 +59,8 @@ test("9:16 lock makes Capture photo a 9:16 PNG", async ({ page }) => {
   await expect(page.locator("canvas[data-engine]")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "9:16", exact: true }).click();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Capture photo", exact: true }).click();
+  await page.getByText("Capture ▾", { exact: true }).click();
+  await page.getByRole("button", { name: "Photo", exact: true }).click();
   const png = await readFile((await (await download).path())!);
   // PNG IHDR: width and height are big-endian uint32s at bytes 16 and 20.
   const ratio = png.readUInt32BE(16) / png.readUInt32BE(20);

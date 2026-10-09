@@ -26,6 +26,16 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+// Cast images are URLs served from disk, not data URLs — but the image-gen
+// routes forward them straight to the provider as input_references, which
+// needs either a data URL or a publicly reachable one. Re-fetching as a data
+// URL keeps those routes provider-agnostic instead of teaching them about
+// our on-disk file layout.
+export async function urlToDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  return blobToDataUrl(await res.blob());
+}
+
 export async function loadCast(projectId?: string): Promise<CastMember[]> {
   const res = await fetch(projectId ? `/api/cast?project=${encodeURIComponent(projectId)}` : "/api/cast");
   if (!res.ok) {
