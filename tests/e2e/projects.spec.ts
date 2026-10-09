@@ -88,3 +88,21 @@ test("a take sent in Gini-first-vid only shows in its own Dailies", async ({ pag
   await switchTo(page, "Gini-first-vid");
   await expect(page.getByRole("button", { name: /Gini walks into frame/ })).toBeVisible();
 });
+
+// Last in the sequence: it gives Gini-first-vid a cast member.
+test("Audition adds Gini to Gini-first-vid from a ready-made sheet", async ({ page, request }) => {
+  await openAudition(page);
+  await page.getByRole("button", { name: "+ Add from sheet" }).click();
+  await page.getByLabel("Cast member name").fill("Gini");
+  await page.getByLabel("Character sheet").setInputFiles({
+    name: "sheet.png",
+    mimeType: "image/png",
+    // 1×1 transparent PNG, standing in for a character sheet.
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64"),
+  });
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+
+  await expect(page.getByRole("img", { name: "Gini" })).toBeVisible();
+  const roster = await (await request.get("/api/cast?project=gini-first-vid")).json();
+  expect(roster).toEqual([expect.objectContaining({ name: "Gini", sheet: expect.stringContaining("/api/cast/") })]);
+});
