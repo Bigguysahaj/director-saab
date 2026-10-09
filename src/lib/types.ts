@@ -84,7 +84,7 @@ export type ImageGenerateResponse = {
 };
 
 // One entry from OpenRouter's GET /images/models catalog — the "DoP"
-// (Director of Photography) picker in Audition.tsx's Screen Test section
+// (Director of Photography) picker on /screen-test (ScreenTest.tsx)
 // lets the user choose among these instead of a single hardcoded model.
 export type ImageModel = {
   id: string;

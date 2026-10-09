@@ -3,7 +3,7 @@
  * mannequins standing in blocked-out positions/poses) with the reference
  * photo of whichever cast member is assigned to each mannequin's color —
  * see CastPanel.tsx (assignment copies the mannequin's color onto the cast
- * member's `stageColor`) and Audition.tsx's Screen Test section (reads that
+ * member's `stageColor`) and /screen-test (ScreenTest.tsx) (reads that
  * field to build the request this prompt describes).
  *
  * The stage photo is the physics: the mannequins' blocking (position, pose,
@@ -20,7 +20,7 @@
 // Fallback estimate when a model's actual billed cost isn't reported back
 // by the API (see /api/screen-test) — real cost varies per model chosen.
 // The model itself is chosen at generation time via the "DoP" picker in
-// Audition.tsx (src/lib/imageModels.ts has the default and the catalog).
+// ScreenTest.tsx (src/lib/imageModels.ts has the default and the catalog).
 export const SCREEN_TEST_COST_PER_IMAGE = 0.034;
 
 export type ScreenTestCastRef = {

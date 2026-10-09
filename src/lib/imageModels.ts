@@ -2,8 +2,8 @@ import type { ImageModel } from "./types";
 
 /**
  * OpenRouter's live image-gen catalog (GET /images/models), normalized for
- * the "DoP" (Director of Photography) picker in Audition.tsx's Screen Test
- * section — see /api/image-models/route.ts for the fetch + filtering.
+ * the "DoP" (Director of Photography) picker on /screen-test (ScreenTest.tsx)
+ * — see /api/image-models/route.ts for the fetch + filtering.
  */
 
 // Verified working (Muse Image 403s region-blocked from this dev IP, see
