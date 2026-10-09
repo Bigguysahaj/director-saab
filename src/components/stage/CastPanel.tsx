@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { blobToDataUrl, createMember, deleteMember, loadCast, updateMember, type CastMember } from "@/lib/cast";
+import { loadCast, updateMember, type CastMember } from "@/lib/cast";
+import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
 
 /**
  * "+ Cast" popover on Stage: pick from the roster built at /audition to
  * assign a likeness to the selected mannequin. Assigning also copies the
  * mannequin's color-code onto the cast member's `stageColor` (cleared on
- * unassign) — that's what the /audition Screen Test section reads to know
+ * unassign) — that's what /screen-test reads to know
  * which cast member goes in which mannequin's spot. Generating cast members
- * happens on /audition; "Add from sheet" here only adds one whose character
- * sheet (and optional close-up) already exists, stored whole.
+ * happens on /audition; "Add from sheet" (also on /audition) adds one whose
+ * character sheet (and optional close-up) already exists, stored whole.
  */
 export function CastPanel({
   open,
@@ -30,33 +31,6 @@ export function CastPanel({
 }) {
   const [cast, setCast] = useState<CastMember[]>([]);
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [sheet, setSheet] = useState("");
-  const [closeup, setCloseup] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function addFromSheet() {
-    setSaving(true);
-    setError(null);
-    try {
-      const member = await createMember(name.trim());
-      // Don't leave a sheetless member behind if the upload fails.
-      const saved = await updateMember(member.id, { sheet, closeup: closeup || undefined }).catch((err) => {
-        deleteMember(member.id);
-        throw err;
-      });
-      setCast((prev) => [...prev, saved]);
-      setAdding(false);
-      setName("");
-      setSheet("");
-      setCloseup("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't add cast member");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   useEffect(() => {
     if (!open) return;
@@ -96,7 +70,7 @@ export function CastPanel({
                       const nextId = isAssigned ? null : member.id;
                       onAssign(nextId);
                       // Best-effort — a failed write here just means the
-                      // Screen Test section won't see this assignment until
+                      // Screen Test won't see this assignment until
                       // it's retried; the stage assignment itself (above)
                       // already succeeded regardless.
                       updateMember(member.id, { stageColor: nextId ? mannequinColor : null }).catch(() => {});
@@ -120,33 +94,13 @@ export function CastPanel({
           )}
 
           {adding ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-border p-2">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Name"
-                aria-label="Cast member name"
-                className="rounded-full border border-border bg-transparent px-3 py-1.5 text-[11px] text-fg focus:border-accent focus:outline-none"
-              />
-              <SheetDrop label="Character sheet" value={sheet} onChange={setSheet} />
-              <SheetDrop label="Close-up (optional)" value={closeup} onChange={setCloseup} />
-              {error && <p role="alert" className="text-[10px] text-warn">{error}</p>}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setAdding(false)}
-                  className="flex-1 rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim hover:text-fg"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={addFromSheet}
-                  disabled={!name.trim() || !sheet || saving}
-                  className="flex-1 rounded-full border border-accent px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40"
-                >
-                  {saving ? "Adding…" : "Add"}
-                </button>
-              </div>
-            </div>
+            <AddFromSheetForm
+              onAdded={(member) => {
+                setCast((prev) => [...prev, member]);
+                setAdding(false);
+              }}
+              onCancel={() => setAdding(false)}
+            />
           ) : (
             <button
               onClick={() => setAdding(true)}
@@ -173,40 +127,5 @@ export function CastPanel({
         {open ? "× Cast" : "+ Cast"}
       </button>
     </div>
-  );
-}
-
-// The types castStore saves under their real extension (and Seedance takes).
-const SHEET_TYPES = ["image/png", "image/jpeg", "image/webp"];
-
-/** Click-or-drop image picker; the image is kept whole as a data URL. */
-function SheetDrop({ label, value, onChange }: { label: string; value: string; onChange: (dataUrl: string) => void }) {
-  const [error, setError] = useState(false);
-  const take = (file?: File) => {
-    if (!file) return;
-    setError(!SHEET_TYPES.includes(file.type));
-    if (SHEET_TYPES.includes(file.type)) blobToDataUrl(file).then(onChange);
-  };
-  return (
-    <label
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        take(e.dataTransfer.files[0]);
-      }}
-      className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border p-2 hover:border-accent"
-    >
-      {value ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={value} alt={label} className="h-10 w-10 shrink-0 rounded object-cover" />
-      ) : (
-        <div className="h-10 w-10 shrink-0 rounded border border-border" />
-      )}
-      <span className="text-[10px] uppercase tracking-[0.15em] text-fg-dim">
-        {label}
-        {error && <span role="alert" className="block normal-case tracking-normal text-warn">PNG, JPEG or WebP only</span>}
-      </span>
-      <input type="file" accept={SHEET_TYPES.join(",")} aria-label={label} className="hidden" onChange={(e) => take(e.target.files?.[0])} />
-    </label>
   );
 }
