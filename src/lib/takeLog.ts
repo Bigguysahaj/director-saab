@@ -1,5 +1,5 @@
 import "server-only";
-import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./projectStore";
 import type { GenerateRequest, GenerationStatus } from "./types";
@@ -7,8 +7,8 @@ import type { GenerateRequest, GenerationStatus } from "./types";
 /**
  * Every take sent to a video model, on disk under .data/takes/<jobId>/
  * (gitignored): take.json with the prompt, settings, status and kept flag,
- * the reference media and stage spec as real files, and output.mp4 once the
- * job completes. These are the (spec, proxy clip, output, kept?) pairs any
+ * the reference media and stage spec as real files, and the rendered video
+ * (named by videoName below) once the job completes. These are the (spec, proxy clip, output, kept?) pairs any
  * later model work would train on, so they're kept even if Dailies is cleared.
  */
 
@@ -17,6 +17,7 @@ type LoggedReference = { type: string; file: string };
 export type LoggedTake = {
   id: string;
   project: string | null; // the project the take was sent from
+  takeNumber?: number; // 1, 2, … per project; missing on takes logged before numbering
   createdAt: number;
   model: string;
   prompt: string;
@@ -33,15 +34,48 @@ export type LoggedTake = {
   status: GenerationStatus;
   cost: number | null;
   error: string | null;
-  output: string | null; // "output.mp4" once saved
+  output: string | null; // the video's filename once saved
   kept: boolean | null;
 };
 
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 
+function takesRoot(): string {
+  return path.join(dataRoot(), "takes");
+}
+
 function takeDir(id: string): string {
   if (!ID_RE.test(id)) throw new Error(`Invalid take id: ${id}`);
-  return path.join(dataRoot(), "takes", id);
+  return path.join(takesRoot(), id);
+}
+
+async function nextTakeNumber(project: string | null): Promise<number> {
+  let ids: string[] = [];
+  try {
+    ids = await readdir(takesRoot());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  let max = 0;
+  for (const id of ids) {
+    const take = await readTake(id).catch(() => null);
+    if (take && take.project === project) max = Math.max(max, take.takeNumber ?? 0);
+  }
+  return max + 1;
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * <project>_take-<NN>_<YYYYMMDD-HHMM>.mp4, so a video copied out of
+ * .data/ still says where it came from. Local time, since it's for the
+ * person reading it. Takes from before numbering keep output.mp4.
+ */
+function videoName(take: LoggedTake): string {
+  if (take.takeNumber == null) return "output.mp4";
+  const d = new Date(take.createdAt);
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `${take.project ?? "untitled"}_take-${pad(take.takeNumber)}_${stamp}.mp4`;
 }
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -97,6 +131,7 @@ export async function logSubmittedTake({
   const take: LoggedTake = {
     id,
     project,
+    takeNumber: await nextTakeNumber(project),
     createdAt: Date.now(),
     model: request.model,
     prompt: request.prompt,
@@ -142,7 +177,7 @@ const savingOutput = new Map<string, Promise<void>>();
 
 async function saveOutput(outputPath: string, fetchOutput: () => Promise<Response>): Promise<void> {
   // Written under a temp name and renamed into place, so a half-written
-  // video never sits at output.mp4.
+  // video never sits under the final name.
   const tmp = `${outputPath}.${process.pid}.tmp`;
   try {
     const res = await fetchOutput();
@@ -162,7 +197,8 @@ export async function recordTakeResult(
   fetchOutput: () => Promise<Response>
 ): Promise<void> {
   const take = await readTake(id);
-  const outputPath = path.join(takeDir(id), "output.mp4");
+  const name = take.output ?? videoName(take);
+  const outputPath = path.join(takeDir(id), name);
   let output = take.output;
   if (result.status === "completed" && !(await exists(outputPath))) {
     let saving = savingOutput.get(id);
@@ -171,7 +207,7 @@ export async function recordTakeResult(
       savingOutput.set(id, saving);
     }
     await saving;
-    output = "output.mp4";
+    output = name;
   }
   await writeTake({
     ...take,
