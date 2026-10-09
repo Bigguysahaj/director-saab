@@ -99,10 +99,9 @@ export async function createProject(rawName: string): Promise<Project> {
   if (file.projects.some((p) => slugify(p.name) === slug)) {
     throw new Error(`A project called "${name}" already exists`);
   }
-  // A renamed project keeps its old slug as id; stamp the new one (IST) instead.
-  const ist = new Date(Date.now() + 5.5 * 3600_000).toISOString().replace(/\D/g, "");
-  const id = file.projects.some((p) => p.id === slug) ? `${slug}-${ist.slice(0, 8)}-${ist.slice(8, 14)}` : slug;
-  if (file.projects.some((p) => p.id === id)) throw new Error("Try again in a second");
+  // A renamed project keeps its old slug as id, so number the new one past it.
+  let id = slug;
+  for (let n = 2; file.projects.some((p) => p.id === id); n++) id = `${slug}-${n}`;
 
   const project: Project = { id, name, createdAt: Date.now() };
   await mkdir(projectDir(id), { recursive: true });

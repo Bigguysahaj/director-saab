@@ -115,9 +115,11 @@ it('a renamed project frees its old name for a new project', async () => {
   const pilot = await projects.createProject('Pilot');
   await projects.renameProject(pilot.id, 'Season 1');
   const again = await projects.createProject('Pilot');
-  expect(again.id).toMatch(/^pilot-\d{8}-\d{6}$/);
+  expect(again.id).toBe('pilot-2');
   expect((await projects.listProjects()).projects.map(p => p.name)).toEqual(['Default', 'Season 1', 'Pilot']);
   await expect(projects.createProject('pilot')).rejects.toThrow(/already/i);
+  await projects.renameProject(again.id, 'Season 2');
+  expect((await projects.createProject('Pilot')).id).toBe('pilot-3');
 });
 
 it('an unreadable or mid-write take log does not block deleting a project', async () => {
