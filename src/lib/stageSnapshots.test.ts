@@ -34,6 +34,15 @@ describe("stage snapshots", () => {
     expect(spec.warning).toBe("Stage changed since this take was recorded.");
   });
 
+  it("finds the spec for a clip with a suffix after the timestamp", () => {
+    saveStageSnapshot(localStorage, 1700, layout(1));
+
+    for (const name of ["stage-clip-1700_cut.mp4", "stage-clip-1700 (1).mp4"]) {
+      expect(stageSpecForClip(localStorage, name).stage).not.toBeNull();
+    }
+    expect(stageSpecForClip(localStorage, "stage-clip-17001.mp4").stage).toBeNull();
+  });
+
   it("notes a missing spec for renamed or unknown clips", () => {
     saveStageSnapshot(localStorage, 1700, layout(1));
 

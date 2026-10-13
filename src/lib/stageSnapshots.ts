@@ -36,7 +36,7 @@ export function stageSpecForClip(
   storage: Storage,
   filename: string
 ): { stage: StageSpec | null; warning: string | null } {
-  const ts = Number(/^stage-clip-(\d+)\./.exec(filename)?.[1]);
+  const ts = Number(/^stage-clip-(\d+)/.exec(filename)?.[1]);
   const snapshot = readSnapshots(storage).find((s) => s.ts === ts);
   if (!snapshot) return { stage: null, warning: "No stage spec for this clip." };
 
