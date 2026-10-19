@@ -239,21 +239,48 @@ export function SendTake({
             />
             {stageSpec?.warning && <span className="text-[11px] text-warn">{stageSpec.warning}</span>}
           </label>
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Character images (≤{MAX_CHARACTER_IMAGES})</span>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              aria-label="Character images"
-              disabled={disabled}
-              className="text-[11px] text-fg-dim"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []).slice(0, MAX_CHARACTER_IMAGES);
-                pick(() => Promise.all(files.map(async (f) => ({ name: f.name, dataUrl: await readDataUrl(f) }))), setUploads);
-              }}
-            />
-          </label>
+          <div className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1">
+              <span className={LABEL}>Reference images (≤{MAX_CHARACTER_IMAGES})</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                aria-label="Reference images"
+                disabled={disabled}
+                className="text-[11px] text-fg-dim"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  const available = Math.max(0, MAX_CHARACTER_IMAGES - uploads.length);
+                  pick(
+                    () => Promise.all(files.slice(0, available).map(async (f) => ({ name: f.name, dataUrl: await readDataUrl(f) }))),
+                    (imgs) => {
+                      setUploads((current) => [...current, ...imgs].slice(0, MAX_CHARACTER_IMAGES));
+                      if (files.length > available) setError(`Only ${MAX_CHARACTER_IMAGES} reference images can be uploaded.`);
+                    },
+                  );
+                }}
+              />
+            </label>
+            {uploads.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {uploads.map((img, i) => {
+                  const tag = `@Image${castImages.length + i + 1}`;
+                  return (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.dataUrl} alt={tag} className="h-16 w-16 rounded-sm object-cover" />
+                      <span className="text-[11px] text-fg-dim">{tag}</span>
+                      <button type="button" aria-label={`Remove ${tag}`} onClick={() => { edit(); setUploads((current) => current.filter((_, index) => index !== i)); }} className="text-[11px] text-fg-dim hover:text-fg">
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {sheetCast.length > 0 && (
             <label className="flex flex-col gap-1">
               <span className={LABEL}>Or cast from sheet</span>

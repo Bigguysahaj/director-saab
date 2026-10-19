@@ -23,7 +23,7 @@ test("Send take previews the cost and only calls /api/generate after Confirm", a
   await page.goto("/");
   await page.getByText("Send a stage take", { exact: true }).click();
   await page.getByLabel("Take video").setInputFiles(TAKE);
-  await page.getByLabel("Character images").setInputFiles({
+  await page.getByLabel("Reference images").setInputFiles({
     name: "character.png",
     mimeType: "image/png",
     // 1×1 transparent PNG
