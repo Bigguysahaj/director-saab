@@ -15,11 +15,24 @@ Get a key at https://openrouter.ai/settings/keys and set it as `OPENROUTER_API_K
 
 Without a key, the app still runs in **demo mode**: the model picker shows a static fallback catalog so you can see the UI, but calling Action returns a clear "not configured" error instead of generating.
 
+### Sending takes with reference media
+
+OpenRouter only accepts `https` reference URLs, so the server stores the take video, images and voice line under `.data/media/` and hands OpenRouter a link at `PUBLIC_MEDIA_BASE_URL`. In local dev, expose the dev server with ngrok:
+
+```bash
+ngrok http 3000
+# then in .env.local:
+PUBLIC_MEDIA_BASE_URL=https://<your-subdomain>.ngrok-free.app
+```
+
+Restart `npm run dev` after setting it. Without it, sending a take with media fails with an error naming `PUBLIC_MEDIA_BASE_URL`. The stored files under `/api/media/` are public to anyone who has the link.
+
 ## How it's wired
 
 - `src/lib/openrouter.ts` — server-only client for OpenRouter's video endpoints (create job, poll job, fetch rendered content).
 - `src/app/api/models` — proxies the live model catalog (falls back to `src/lib/models.ts` if no key is set or the call fails).
-- `src/app/api/generate` — submits a job (`POST /api/v1/videos`).
+- `src/app/api/generate` — submits a job (`POST /api/v1/videos`), first swapping `data:` references for `PUBLIC_MEDIA_BASE_URL` links.
+- `src/app/api/media/[filename]` — serves those stored references to OpenRouter.
 - `src/app/api/generate/[id]` — polls job status.
 - `src/app/api/generate/[id]/content` — streams the finished video back through the server, since OpenRouter's content endpoint needs the same `Authorization` header as the rest of the API (it can't be linked to directly from the browser).
 - `src/components/Studio.tsx` — the page: prompt, model/duration/resolution/aspect-ratio controls, the viewer, and the "Dailies" history strip (persisted to `localStorage`, per-browser).
