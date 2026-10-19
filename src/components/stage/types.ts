@@ -1,4 +1,4 @@
-export type ObjectKind = "box" | "ball" | "purse" | "light" | "camera" | "mannequin";
+export type ObjectKind = "box" | "ball" | "purse" | "light" | "camera" | "mannequin" | "wind";
 import type { MannequinPose, Vec3 } from "../../lib/poses/model";
 export { DEFAULT_POSE } from "../../lib/poses/model";
 export type { JointKey, MannequinPose, Vec3 } from "../../lib/poses/model";
@@ -23,6 +23,9 @@ export type SceneObject = {
   pose?: MannequinPose; // mannequin only — static rig pose, used while no keyframe carries a pose
   keyframes?: Keyframe[]; // box/ball/purse/mannequin only, sorted by time
   castId?: string; // mannequin only — id into the /audition roster (src/lib/cast.ts), metadata only for now
+  strength?: number; // wind only, >= 0
+  gust?: boolean; // wind only
+  at?: number; // wind only — start time in seconds, 0..TIMELINE_DURATION
 };
 
 export const TIMELINE_DURATION = 8; // seconds

@@ -24,6 +24,7 @@ import { DEFAULT_MANNEQUIN_COLOR, STAGE_PALETTE } from "@/lib/stageColors";
 import { JOINTS, resolvePose } from "@/lib/poses/model";
 import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
 import { fitAspect, pickRecorderMimeType } from "@/lib/videoReference";
+import { Inventory } from "./Inventory";
 import { STAGE_LAYOUT_KEY, saveStageSnapshot } from "@/lib/stageSnapshots";
 
 const BACKDROP_COLOR = "#e8e2d6";
@@ -275,6 +276,54 @@ function LightStand({ id, position, rotation, selected, onSelect, objRef }: Item
   );
 }
 
+/** A Ritter-style fan: stand + round cage, with an arrow along local +Z showing the blow direction. */
+function WindMachine({ id, position, rotation, selected, onSelect, objRef }: ItemProps & {
+  position: Vec3;
+  rotation: Vec3;
+}) {
+  const mat = (
+    <meshStandardMaterial color={PROP_COLOR} roughness={0.6} emissive={selected ? "#ffffff" : "#000000"} emissiveIntensity={selected ? 0.15 : 0} />
+  );
+  return (
+    <group
+      ref={(g) => objRef(id, g)}
+      position={position}
+      rotation={rotation}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        onSelect(id);
+      }}
+    >
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.04, 0.04, 1, 12]} />
+        {mat}
+      </mesh>
+      <mesh position={[0, 0.05, 0]} castShadow>
+        <cylinderGeometry args={[0.25, 0.25, 0.1, 16]} />
+        {mat}
+      </mesh>
+      {/* round cage facing +Z */}
+      <mesh position={[0, 1.15, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <torusGeometry args={[0.3, 0.03, 8, 24]} />
+        {mat}
+      </mesh>
+      <mesh position={[0, 1.15, -0.05]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.2, 12]} />
+        {mat}
+      </mesh>
+      {/* blow direction */}
+      <mesh position={[0, 1.15, 0.65]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.5, 8]} />
+        <meshBasicMaterial color="#7fc8ff" />
+      </mesh>
+      <mesh position={[0, 1.15, 0.95]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.07, 0.15, 12]} />
+        <meshBasicMaterial color="#7fc8ff" />
+      </mesh>
+    </group>
+  );
+}
+
 /** A simple camera-shaped marker. Its own PerspectiveCamera becomes the
  * active view while "looking through" it — a full viewport swap (not a
  * picture-in-picture), so the main camera and OrbitControls step aside
@@ -416,6 +465,9 @@ function SceneContents({
         }
         if (o.kind === "light") {
           return <LightStand key={o.id} {...common} position={o.position} rotation={o.rotation} />;
+        }
+        if (o.kind === "wind") {
+          return <WindMachine key={o.id} {...common} position={o.position} rotation={o.rotation} />;
         }
         if (o.kind === "mannequin") {
           return (
@@ -1287,7 +1339,7 @@ export function StageScene() {
     );
   }, [selectedId, effectiveActiveJoint]);
 
-  function addFromInventory(kind: "box" | "ball" | "purse" | "mannequin") {
+  function addFromInventory(kind: "box" | "ball" | "purse" | "mannequin" | "wind") {
     const id = nextId.current++;
     const base: SceneObject = {
       id,
@@ -1312,12 +1364,22 @@ export function StageScene() {
       base.length = PURSE_SIZE.length;
       base.breadth = PURSE_SIZE.breadth;
     }
+    else if (kind === "wind") {
+      delete base.color;
+      base.strength = 0.5;
+      base.gust = false;
+      base.at = 0;
+    }
     // mannequin stands at y=0 — its own geometry is already floor-relative,
     // and its rest pose defaults inside the Mannequin component
     setObjects((prev) => [...prev, base]);
     setInventoryOpen(false);
     setSelectedId(id);
     setGizmoMode("translate");
+  }
+
+  function updateWind(patch: Partial<SceneObject>) {
+    setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, ...patch } : o)));
   }
 
   // Ctrl+drag leaves a copy at the start position — the gizmo keeps
@@ -1751,22 +1813,7 @@ export function StageScene() {
                         </span>
                       ))}
                     </div>
-                    <div className="flex items-center gap-1">
-                      {([
-                        ["box", "Box"],
-                        ["ball", "Ball"],
-                        ["purse", "Purse"],
-                        ["mannequin", "Mannequin"],
-                      ] as const).map(([kind, label]) => (
-                        <button
-                          key={kind}
-                          onClick={() => addFromInventory(kind)}
-                          className="rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-                        >
-                          + {label}
-                        </button>
-                      ))}
-                    </div>
+                    <Inventory onAdd={addFromInventory} />
                   </div>
                 )}
                 <button
@@ -1992,6 +2039,33 @@ export function StageScene() {
             <div className="ml-auto flex flex-col items-end gap-1 text-right">
               {canDuplicate && (
                 <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">hold ctrl and drag to duplicate</p>
+              )}
+              {selected.kind === "wind" && (
+                <div className="flex items-center gap-2 rounded-full border border-border bg-bg-panel py-1 pl-3 pr-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim">
+                  <label className="flex items-center gap-1">
+                    Strength
+                    <input
+                      type="number" min={0} step={0.1}
+                      value={selected.strength ?? 0.5}
+                      onChange={(e) => updateWind({ strength: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-11 bg-transparent px-1 text-fg outline-none"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1">
+                    Gust
+                    <input type="checkbox" checked={selected.gust ?? false} onChange={(e) => updateWind({ gust: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center gap-1">
+                    At
+                    <input
+                      type="number" min={0} max={TIMELINE_DURATION} step={0.1}
+                      value={selected.at ?? 0}
+                      onChange={(e) => updateWind({ at: Math.min(TIMELINE_DURATION, Math.max(0, Number(e.target.value) || 0)) })}
+                      className="w-11 bg-transparent px-1 text-fg outline-none"
+                    />
+                    s
+                  </label>
+                </div>
               )}
               {effectiveGizmoMode === "pose" ? (
                 effectiveActiveJoint ? (
