@@ -20,3 +20,14 @@ Follow this for every feature, fix, or idea that turns into work — including w
 5. **Build to green.** Implement until those tests pass. Report honestly if they don't.
 6. **Focused PR.** One PR per issue, branch named `fix/<problem>` or `feat/<feature>`, PR title starts with the ticket ID, body links the issue (`Closes #n`).
 7. **Stale tests.** If a test or eval no longer earns its place, ask the owner before removing it; remove only on approval.
+
+# Working in parallel (agents and worktrees)
+
+The owner's main checkout is theirs. Never run `git checkout`, `git switch` or `git reset` there, and never edit files in it, unless the owner asked you to.
+
+- **One agent, one branch, one worktree.** Start every task in its own worktree: `git worktree add ../director-saab-<name> -b feat/<name> origin/main`. Work and commit only there. Git won't check one branch out in two folders, so agents can't collide.
+- **Tell the owner** the worktree folder and branch when you start, and where they can try the result.
+- **Never delete a worktree** until it is clean and pushed (`git status` empty, branch on origin). Then `git worktree remove`; the branch stays.
+- **A new worktree is missing gitignored files.** Symlink `.env.local` (and `.data/` if the work needs the owner's cast and takes) from the main checkout, and run `npm install`.
+- **Dev servers:** run a second one on another port (`npm run dev -- -p 3001`).
+- **Secrets:** never print `.env.local` values. To check a variable is set, test it without echoing it (e.g. `[ -n "$v" ] && echo set`).
