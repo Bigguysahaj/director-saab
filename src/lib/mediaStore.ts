@@ -56,8 +56,11 @@ export function mediaStore() {
       if (!NAME_RE.test(name)) throw new Error(`Invalid media name: ${name}`);
       const key = `${project}/${name}`;
       if (r2) {
+        // aws4fetch re-wraps the body as a stream, so without an explicit length the
+        // upload goes chunked and R2 rejects it (411 MissingContentLength).
         await fetchR2("put", `${endpoint}/${key}`, {
-          method: "PUT", body: new Uint8Array(bytes), headers: { "Content-Type": mime },
+          method: "PUT", body: new Uint8Array(bytes),
+          headers: { "Content-Type": mime, "Content-Length": String(bytes.byteLength) },
         });
         return { key, url: `${base}/${key}` };
       }
