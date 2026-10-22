@@ -294,23 +294,76 @@ function WindMachine({ id, position, rotation, selected, onSelect, objRef }: Ite
         onSelect(id);
       }}
     >
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <cylinderGeometry args={[0.04, 0.04, 1, 12]} />
+      <mesh position={[0, 0.43, 0]} castShadow>
+        <cylinderGeometry args={[0.045, 0.06, 0.76, 16]} />
         {mat}
       </mesh>
-      <mesh position={[0, 0.05, 0]} castShadow>
-        <cylinderGeometry args={[0.25, 0.25, 0.1, 16]} />
+      <mesh position={[0, 0.04, 0]} castShadow>
+        <cylinderGeometry args={[0.29, 0.32, 0.08, 32]} />
         {mat}
       </mesh>
-      {/* round cage facing +Z */}
-      <mesh position={[0, 1.15, 0]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <torusGeometry args={[0.3, 0.03, 8, 24]} />
-        {mat}
-      </mesh>
-      <mesh position={[0, 1.15, -0.05]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.08, 0.08, 0.2, 12]} />
-        {mat}
-      </mesh>
+      <group position={[0, 1.15, 0]}>
+        {/* Yoke supports the head at its side pivots. */}
+        <mesh position={[0, -0.36, 0]} castShadow>
+          <boxGeometry args={[0.86, 0.045, 0.08]} />
+          {mat}
+        </mesh>
+        {[-1, 1].map((side) => (
+          <group key={side}>
+            <mesh position={[side * 0.41, -0.18, 0]} castShadow>
+              <boxGeometry args={[0.045, 0.36, 0.08]} />
+              {mat}
+            </mesh>
+            <mesh position={[side * 0.4, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.055, 0.055, 0.09, 16]} />
+              {mat}
+            </mesh>
+          </group>
+        ))}
+        {/* Motor and hub share the blade axis, along local +Z. */}
+        <mesh position={[0, 0, -0.16]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.105, 0.105, 0.25, 24]} />
+          {mat}
+        </mesh>
+        {[0, 1, 2].map((blade) => (
+          <group key={blade} rotation={[0, 0, blade * Math.PI * 2 / 3]}>
+            <mesh position={[0.07, 0.18, 0]} rotation={[0.12, 0.15, -0.35]} scale={[0.105, 0.18, 0.018]} castShadow>
+              <sphereGeometry args={[1, 20, 12]} />
+              <meshStandardMaterial color="#a9b3b8" metalness={0.55} roughness={0.4} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, 0, 0.035]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[0.075, 0.075, 0.1, 24]} />
+          {mat}
+        </mesh>
+        {/* Torus geometry already lies in XY: both guards face +Z. */}
+        {[-0.09, 0.11].map((depth) => (
+          <group key={depth} position={[0, 0, depth]}>
+            {[0.12, 0.23, 0.36].map((radius) => (
+              <mesh key={radius}>
+                <torusGeometry args={[radius, radius === 0.36 ? 0.018 : 0.006, 6, 48]} />
+                {mat}
+              </mesh>
+            ))}
+            {Array.from({ length: 8 }, (_, spoke) => (
+              <mesh key={spoke} rotation={[0, 0, spoke * Math.PI / 8]}>
+                <cylinderGeometry args={[0.005, 0.005, 0.72, 6]} />
+                {mat}
+              </mesh>
+            ))}
+          </group>
+        ))}
+        {Array.from({ length: 8 }, (_, strut) => {
+          const angle = strut * Math.PI / 4;
+          return (
+            <mesh key={strut} position={[Math.cos(angle) * 0.36, Math.sin(angle) * 0.36, 0.01]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.008, 0.008, 0.2, 6]} />
+              {mat}
+            </mesh>
+          );
+        })}
+      </group>
       {/* blow direction */}
       <mesh position={[0, 1.15, 0.65]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.02, 0.02, 0.5, 8]} />
