@@ -48,7 +48,8 @@ function readDataUrl(file: File): Promise<string> {
 async function urlToDataUrl(url: string): Promise<string> {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Couldn't load that character sheet.");
-  return readDataUrl(new File([await res.blob()], ""));
+  const blob = await res.blob();
+  return readDataUrl(new File([blob], "", { type: blob.type }));
 }
 
 /** Length of an audio/video file in seconds. MediaRecorder output often has
@@ -118,8 +119,10 @@ export function SendTake({
   const [stageSpec, setStageSpec] = useState<{ stage: StageSpec | null; warning: string | null } | null>(null);
   const [uploads, setUploads] = useState<Picture[]>([]);
   const [castImages, setCastImages] = useState<Picture[]>([]);
+  const [useCastSheet, setUseCastSheet] = useState(true);
   // Cast sheets lead so the sheet stays @Image1; uploads follow.
-  const images = [...castImages, ...uploads];
+  const activeCastImages = useCastSheet ? castImages : [];
+  const images = [...activeCastImages, ...uploads];
   const [audio, setAudio] = useState<Media | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>();
@@ -163,6 +166,18 @@ export function SendTake({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
+  }
+
+  function addImages(files: File[]) {
+    const imageFiles = files.filter((file) => file.type.startsWith("image/") || (!file.type && /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic|heif)$/i.test(file.name)));
+    const available = Math.max(0, MAX_CHARACTER_IMAGES - uploads.length);
+    pick(
+      () => Promise.all(imageFiles.slice(0, available).map(async (file) => ({ name: file.name, dataUrl: await readDataUrl(file) }))),
+      (imgs) => {
+        setUploads((current) => [...current, ...imgs].slice(0, MAX_CHARACTER_IMAGES));
+        if (imageFiles.length > available) setError(`Only ${MAX_CHARACTER_IMAGES} reference images can be uploaded.`);
+      },
+    );
   }
 
   function buildRequest(): GenerateTakeRequest {
@@ -239,7 +254,67 @@ export function SendTake({
             />
             {stageSpec?.warning && <span className="text-[11px] text-warn">{stageSpec.warning}</span>}
           </label>
-          <div className="flex flex-col gap-1">
+          {sheetCast.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-1">
+                <span className={LABEL}>Or cast from sheet</span>
+                <select
+                  aria-label="Cast from sheet"
+                  defaultValue=""
+                  disabled={disabled}
+                  className={FIELD}
+                  onChange={(e) => {
+                    edit();
+                    pickedCastId.current = e.target.value;
+                    setCastImages([]);
+                    const member = sheetCast.find((m) => m.id === e.target.value);
+                    if (!member) return;
+                    // Both sheets go as-is, sheet first so it's @Image1.
+                    const urls = [member.sheet, member.closeup].filter(Boolean);
+                    pick(
+                      () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
+                      (imgs) => {
+                        if (pickedCastId.current === member.id) setCastImages(imgs);
+                      },
+                    );
+                  }}
+                >
+                  <option value="">—</option>
+                  {sheetCast.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-fg-dim">
+                <input
+                  type="checkbox"
+                  checked={useCastSheet}
+                  disabled={disabled}
+                  onChange={(e) => { edit(); setUseCastSheet(e.target.checked); }}
+                />
+                Use cast sheet
+              </label>
+              {activeCastImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {activeCastImages.map((img, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.dataUrl} alt={`@Image${i + 1}`} title={img.name} className="h-16 w-16 rounded-sm object-cover" />
+                      <span className="text-[11px] text-fg-dim">{`@Image${i + 1}`}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div
+            className="flex flex-col gap-1 rounded-sm border border-dashed border-border p-2"
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (!disabled) addImages(Array.from(e.dataTransfer.files));
+            }}
+          >
             <label className="flex flex-col gap-1">
               <span className={LABEL}>Reference images (≤{MAX_CHARACTER_IMAGES})</span>
               <input
@@ -252,21 +327,15 @@ export function SendTake({
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
                   e.target.value = "";
-                  const available = Math.max(0, MAX_CHARACTER_IMAGES - uploads.length);
-                  pick(
-                    () => Promise.all(files.slice(0, available).map(async (f) => ({ name: f.name, dataUrl: await readDataUrl(f) }))),
-                    (imgs) => {
-                      setUploads((current) => [...current, ...imgs].slice(0, MAX_CHARACTER_IMAGES));
-                      if (files.length > available) setError(`Only ${MAX_CHARACTER_IMAGES} reference images can be uploaded.`);
-                    },
-                  );
+                  addImages(files);
                 }}
               />
+              <span className="text-[11px] text-fg-faint">Choose or drop image files here.</span>
             </label>
             {uploads.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {uploads.map((img, i) => {
-                  const tag = `@Image${castImages.length + i + 1}`;
+                  const tag = `@Image${activeCastImages.length + i + 1}`;
                   return (
                     <div key={i} className="flex flex-col items-center gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -281,36 +350,6 @@ export function SendTake({
               </div>
             )}
           </div>
-          {sheetCast.length > 0 && (
-            <label className="flex flex-col gap-1">
-              <span className={LABEL}>Or cast from sheet</span>
-              <select
-                aria-label="Cast from sheet"
-                defaultValue=""
-                disabled={disabled}
-                className={FIELD}
-                onChange={(e) => {
-                  pickedCastId.current = e.target.value;
-                  setCastImages([]);
-                  const member = sheetCast.find((m) => m.id === e.target.value);
-                  if (!member) return;
-                  // Both sheets go as-is, sheet first so it's @Image1.
-                  const urls = [member.sheet, member.closeup].filter(Boolean);
-                  pick(
-                    () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
-                    (imgs) => {
-                      if (pickedCastId.current === member.id) setCastImages(imgs);
-                    },
-                  );
-                }}
-              >
-                <option value="">—</option>
-                {sheetCast.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Voice line (MP3/WAV, optional)</span>
             <input
