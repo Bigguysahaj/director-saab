@@ -2,7 +2,7 @@ import { JOINTS, resolvePose } from "../../lib/poses/model";
 import { TIMELINE_DURATION, type MannequinPose, type SceneObject, type Vec3 } from "./types";
 
 export const SCENE_SCHEMA = "director-stage-scene/v1";
-const SCENE_KINDS: SceneObject["kind"][] = ["box", "ball", "purse", "light", "camera", "mannequin"];
+const SCENE_KINDS: SceneObject["kind"][] = ["box", "ball", "purse", "light", "camera", "mannequin", "wind"];
 
 const isVec3 = (v: unknown): v is Vec3 => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n));
 
@@ -18,6 +18,11 @@ export function parseScene(data: unknown): SceneObject[] {
     ids.add(o.id);
     if (!SCENE_KINDS.includes(o.kind)) throw new Error(`${where}: unknown kind "${o.kind}"`);
     if (!isVec3(o.position) || !isVec3(o.rotation)) throw new Error(`${where}: position/rotation must be [x, y, z]`);
+    if (o.kind === "wind") {
+      if (o.strength !== undefined && (typeof o.strength !== "number" || !(o.strength >= 0))) throw new Error(`${where}: strength must be a number >= 0`);
+      if (o.gust !== undefined && typeof o.gust !== "boolean") throw new Error(`${where}: gust must be true or false`);
+      if (o.at !== undefined && (typeof o.at !== "number" || !(o.at >= 0 && o.at <= TIMELINE_DURATION))) throw new Error(`${where}: at must be 0-${TIMELINE_DURATION}s`);
+    }
     for (const k of o.keyframes ?? []) {
       if (typeof k?.time !== "number" || k.time < 0 || k.time > TIMELINE_DURATION || !isVec3(k.position) || !isVec3(k.rotation)) {
         throw new Error(`${where}: bad keyframe (time 0-${TIMELINE_DURATION}s, position/rotation [x, y, z])`);

@@ -3,11 +3,13 @@ import purseHook from "../../../docs/scenes/purse-hook.json";
 import { parseScene } from "./scene";
 
 const camera = { id: 1, kind: "camera", position: [0, 1, 2], rotation: [0, 0, 0] };
+const wind = { id: 2, kind: "wind", position: [1, 0, 0], rotation: [0, 1.2, 0], strength: 0.6, gust: true, at: 2 };
 
 describe("parseScene", () => {
   it("accepts a bare array or a { schema, objects } wrapper", () => {
     expect(parseScene([camera])).toHaveLength(1);
     expect(parseScene({ schema: "director-stage-scene/v1", objects: [camera] })).toHaveLength(1);
+    expect(parseScene([camera, wind])[1]).toEqual(wind);
   });
 
   it("rejects unknown kinds, bad vectors, duplicate ids and out-of-range keyframes", () => {
@@ -18,6 +20,9 @@ describe("parseScene", () => {
       parseScene([{ ...camera, keyframes: [{ time: 99, position: [0, 0, 0], rotation: [0, 0, 0] }] }])
     ).toThrow(/keyframe/);
     expect(() => parseScene([camera, { ...camera, id: 2 }])).toThrow(/one camera/);
+    for (const bad of [{ strength: -1 }, { strength: "high" }, { at: -1 }, { at: 99 }, { gust: "yes" }]) {
+      expect(() => parseScene([{ ...wind, ...bad }])).toThrow(/strength|gust|\bat\b/);
+    }
   });
 
   it("loads the purse-hook shot", () => {
