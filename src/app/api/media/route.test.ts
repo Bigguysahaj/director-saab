@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { publishDataReferences } from "@/lib/mediaReference";
-import { GET } from "./[filename]/route";
+import { GET } from "./[project]/[filename]/route";
 
 let root: string;
 
@@ -23,9 +23,9 @@ afterEach(async () => {
 });
 
 const get = (filename: string) =>
-  GET(new Request(`http://localhost/api/media/${filename}`), { params: Promise.resolve({ filename }) });
+  GET(new Request(`http://localhost/api/media/untitled/${filename}`), { params: Promise.resolve({ project: "untitled", filename }) });
 
-describe("GET /api/media/[filename]", () => {
+describe("GET /api/media/[project]/[filename]", () => {
   it.each([
     ["video/mp4", "video_url"],
     ["image/png", "image_url"],

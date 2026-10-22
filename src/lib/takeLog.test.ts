@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+const store = vi.hoisted(() => ({ delete: vi.fn(), deleteAll: vi.fn() }));
+vi.mock("./mediaStore", () => ({ mediaStore: () => store }));
+
 import { logSubmittedTake, readTake, recordTakeResult, setKept } from "./takeLog";
 import type { GenerateRequest } from "./types";
 
@@ -41,6 +44,22 @@ const request: GenerateRequest = {
 const stage = { schema: "director-stage-scene/v1", objects: [{ id: 1, kind: "box", position: [0, 0, 0], rotation: [0, 0, 0] }] };
 
 describe("takeLog", () => {
+  it("leaves published reference files alone after completed and failed takes", async () => {
+    const url = "https://media.example.com/proj/00000000-0000-4000-8000-000000000001.mp4";
+    const published: GenerateRequest = {
+      model: "m", prompt: "p",
+      input_references: [{ type: "video_url", video_url: { url } }],
+    };
+    for (const status of ["completed", "failed"] as const) {
+      const id = `manual-cleanup-${status}`;
+      await logSubmittedTake({ id, request: published, project: "proj" });
+      await recordTakeResult(id, { status }, async () => new Response("video-out"));
+      expect(await readTake(id)).toMatchObject({ status, references: [{ type: "video_url", file: url }] });
+      expect(store.delete).not.toHaveBeenCalled();
+      expect(store.deleteAll).not.toHaveBeenCalled();
+    }
+  });
+
   it("records which project the take was sent from", async () => {
     await logSubmittedTake({ id: "job-p", request, project: "gini-first-vid" });
     expect((await readTake("job-p")).project).toBe("gini-first-vid");

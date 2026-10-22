@@ -6,7 +6,7 @@ A minimal, cinematic front end for AI video generation over [OpenRouter's video 
 
 ```bash
 npm install
-cp .env.local.example .env.local
+cp .env.example .env.local
 # then put your key in .env.local
 npm run dev
 ```
@@ -17,7 +17,19 @@ Without a key, the app still runs in **demo mode**: the model picker shows a sta
 
 ### Sending takes with reference media
 
-OpenRouter only accepts `https` reference URLs, so the server stores the take video, images and voice line under `.data/media/` and hands OpenRouter a link at `PUBLIC_MEDIA_BASE_URL`. In local dev, expose the dev server with ngrok:
+OpenRouter only accepts `https` reference URLs. Cloudflare R2 is the preferred storage option: set all five variables in `.env.local` and no ngrok tunnel is needed:
+
+```dotenv
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_BASE_URL=
+```
+
+Use the bucket's public `https` URL (an `r2.dev` URL or a custom domain) for `R2_PUBLIC_BASE_URL`. Partial R2 configuration is an error. Restart `npm run dev` after changing environment variables.
+
+For local disk storage instead, leave all R2 variables empty. References are stored under `.data/media/<project>/`; expose the dev server with ngrok:
 
 ```bash
 ngrok http 3000
@@ -25,14 +37,16 @@ ngrok http 3000
 PUBLIC_MEDIA_BASE_URL=https://<your-subdomain>.ngrok-free.app
 ```
 
-Restart `npm run dev` after setting it. Without it, sending a take with media fails with an error naming `PUBLIC_MEDIA_BASE_URL`. The stored files under `/api/media/` are public to anyone who has the link.
+Without R2 or an https `PUBLIC_MEDIA_BASE_URL`, sending reference media fails with a configuration error. Files in either store are public to anyone with the link. Nothing is auto-deleted; manual deletion is tracked in ENG-027 (issue #52, storage page).
+
+The browser still sends `data:` URLs through `/api/generate`, and the server uploads them. Vercel limits request bodies to about 4.5 MB, so large video references need presigned direct-to-R2 uploads as a follow-up.
 
 ## How it's wired
 
 - `src/lib/openrouter.ts` — server-only client for OpenRouter's video endpoints (create job, poll job, fetch rendered content).
 - `src/app/api/models` — proxies the live model catalog (falls back to `src/lib/models.ts` if no key is set or the call fails).
-- `src/app/api/generate` — submits a job (`POST /api/v1/videos`), first swapping `data:` references for `PUBLIC_MEDIA_BASE_URL` links.
-- `src/app/api/media/[filename]` — serves those stored references to OpenRouter.
+- `src/app/api/generate` — submits a job (`POST /api/v1/videos`), first swapping `data:` references for public R2 or local storage links.
+- `src/app/api/media/[project]/[filename]` — serves those stored references to OpenRouter.
 - `src/app/api/generate/[id]` — polls job status.
 - `src/app/api/generate/[id]/content` — streams the finished video back through the server, since OpenRouter's content endpoint needs the same `Authorization` header as the rest of the API (it can't be linked to directly from the browser).
 - `src/components/Studio.tsx` — the page: prompt, model/duration/resolution/aspect-ratio controls, the viewer, and the "Dailies" history strip (persisted to `localStorage`, per-browser).

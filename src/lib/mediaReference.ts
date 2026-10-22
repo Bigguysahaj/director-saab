@@ -1,15 +1,18 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./projectStore";
+import { mediaStore, PROJECT_RE } from "./mediaStore";
+export { MediaConfigError } from "./mediaStore";
 import type { GenerateRequest, InputReference } from "./types";
 
 /**
  * OpenRouter only takes https reference URLs, so data: URLs from the browser
- * are stored under .data/media/ and served from /api/media/<file> at
- * PUBLIC_MEDIA_BASE_URL (an ngrok tunnel in dev; see README).
- * shortcut: files are never cleaned up, add a sweep once storage matters.
+ * go to R2 when R2_* are set, else .data/media/ served from
+ * /api/media/<project>/<file> at PUBLIC_MEDIA_BASE_URL (see README).
+ * shortcut: files are never cleaned up automatically; manual deletion is
+ * tracked in ENG-027 (issue #52, storage page).
  */
 
 export const MIME_BY_EXT: Record<string, string> = {
@@ -36,16 +39,13 @@ function mediaDir(): string {
   return path.join(dataRoot(), "media");
 }
 
-export class MediaConfigError extends Error {}
-
-async function publish(url: string, base: string): Promise<string> {
+async function publish(url: string, project: string, store: ReturnType<typeof mediaStore>): Promise<string> {
   const match = DATA_URL_RE.exec(url);
   if (!match) return url;
-  const [, mime = "", data] = match;
+  const [, mime = "application/octet-stream", data] = match;
   const filename = `${randomUUID()}.${EXT_BY_MIME[mime.toLowerCase()] ?? "bin"}`;
-  await mkdir(mediaDir(), { recursive: true });
-  await writeFile(path.join(mediaDir(), filename), Buffer.from(data, "base64"));
-  return `${base}/api/media/${filename}`;
+  const stored = await store.put(project, filename, Buffer.from(data, "base64"), mime);
+  return stored.url;
 }
 
 function urlOf(ref: InputReference): string {
@@ -53,22 +53,17 @@ function urlOf(ref: InputReference): string {
 }
 
 /** A copy of the request with every data: reference swapped for an https URL. */
-export async function publishDataReferences(request: GenerateRequest): Promise<GenerateRequest> {
+export async function publishDataReferences(request: GenerateRequest, project?: string | null): Promise<GenerateRequest> {
   const refs = request.input_references ?? [];
   const frames = request.frame_images ?? [];
   const hasData = [...refs.map(urlOf), ...frames.map((f) => f.image_url.url)].some((u) => u.startsWith("data:"));
   if (!hasData) return request;
 
-  const base = (process.env.PUBLIC_MEDIA_BASE_URL ?? "").replace(/\/+$/, "");
-  if (!base.startsWith("https://")) {
-    throw new MediaConfigError(
-      "PUBLIC_MEDIA_BASE_URL must be set to a public https URL (e.g. an ngrok tunnel) to send reference media; OpenRouter only accepts https URLs."
-    );
-  }
+  const store = mediaStore();
 
   const input_references = await Promise.all(
     refs.map(async (ref): Promise<InputReference> => {
-      const url = await publish(urlOf(ref), base);
+      const url = await publish(urlOf(ref), project ?? "untitled", store);
       return ref.type === "video_url"
         ? { type: ref.type, video_url: { url } }
         : ref.type === "audio_url"
@@ -77,7 +72,7 @@ export async function publishDataReferences(request: GenerateRequest): Promise<G
     })
   );
   const frame_images = await Promise.all(
-    frames.map(async (f) => ({ ...f, image_url: { url: await publish(f.image_url.url, base) } }))
+    frames.map(async (f) => ({ ...f, image_url: { url: await publish(f.image_url.url, project ?? "untitled", store) } }))
   );
   return {
     ...request,
@@ -86,7 +81,8 @@ export async function publishDataReferences(request: GenerateRequest): Promise<G
   };
 }
 
-export async function readMediaFile(filename: string): Promise<Buffer> {
+export async function readMediaFile(project: string, filename: string): Promise<Buffer> {
+  if (!PROJECT_RE.test(project)) throw new Error(`Invalid media project: ${project}`);
   if (!MEDIA_FILE_RE.test(filename)) throw new Error(`Invalid media file: ${filename}`);
-  return readFile(path.join(mediaDir(), filename));
+  return readFile(path.join(mediaDir(), project, filename));
 }

@@ -23,9 +23,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // An unknown project still gets the take logged, just without one.
+  const projectId = await resolveProjectId(project ?? null).catch(() => null);
   let job;
   try {
-    job = await createVideoJob(await publishDataReferences(body));
+    job = await createVideoJob(await publishDataReferences(body, projectId));
   } catch (err) {
     if (err instanceof MediaConfigError) {
       return NextResponse.json({ error: err.message }, { status: 500 });
@@ -38,8 +40,6 @@ export async function POST(req: Request) {
 
   // The job is already paid for, so a log failure mustn't fail the request.
   try {
-    // An unknown project still gets the take logged, just without one.
-    const projectId = await resolveProjectId(project ?? null).catch(() => null);
     // The original body, so the log keeps the media as files, not tunnel URLs.
     await logSubmittedTake({ id: job.id, request: body, stage, project: projectId });
   } catch (err) {
