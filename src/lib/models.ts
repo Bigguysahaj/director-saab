@@ -139,14 +139,15 @@ function deriveTokenRates(raw: Record<string, unknown>): { token_rate?: number; 
 }
 
 // Research (OpenRouter openapi, 2026-10) says Seedance 2.x takes video and
-// audio refs and 1.5 doesn't. Prefer an explicit catalog list when there is
+// audio refs and 1.5 doesn't; OpenRouter's H3 page lists video-to-video motion
+// transfer (H3 Max doesn't). Prefer an explicit catalog list when there is
 // one; otherwise fall back to that.
 function supportsVideoReference(id: string, raw: Record<string, unknown>): boolean {
   for (const key of ["supported_input_reference_types", "input_reference_types", "supported_input_modalities"]) {
     const val = raw[key];
     if (Array.isArray(val)) return val.some((t) => String(t).includes("video"));
   }
-  return /^bytedance\/seedance-2/.test(id);
+  return /^bytedance\/seedance-2|^minimax\/hailuo-3$/.test(id);
 }
 
 /** Tolerates minor field-naming drift in OpenRouter's live catalog response. */
