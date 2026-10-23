@@ -118,6 +118,7 @@ describe("mediaStore R2", () => {
     expect(url).toBe(`${ENDPOINT}/${KEY}`);
     expect(method).toBe("PUT");
     expect(headers.get("Content-Type")).toBe("video/mp4");
+    expect(headers.get("Content-Length")).toBe(String(bytes.byteLength));
     expect(Buffer.from(body)).toEqual(bytes);
     expect(await readdir(root)).toEqual([]);
   });
