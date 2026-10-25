@@ -25,6 +25,7 @@ import { JOINTS, resolvePose } from "@/lib/poses/model";
 import { projectStageKeypoints, type StageMannequin } from "@/lib/stageKeypoints";
 import { fitAspect, pickRecorderMimeType } from "@/lib/videoReference";
 import { Inventory } from "./Inventory";
+import { useStageUndo } from "./useStageUndo";
 import { STAGE_LAYOUT_KEY, saveStageSnapshot } from "@/lib/stageSnapshots";
 
 const BACKDROP_COLOR = "#e8e2d6";
@@ -1048,6 +1049,8 @@ async function waitForCanvasAspect(canvas: HTMLCanvasElement, aspect: number) {
 
 export function StageScene() {
   const [objects, setObjects] = useState(loadSavedObjects);
+  // Call record() right before any edit to make it undoable.
+  const { record } = useStageUndo(objects, setObjects);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [gizmoMode, setGizmoMode] = useState<"translate" | "rotate" | "pose">("translate");
   const [activeJoint, setActiveJoint] = useState<JointKey | null>("leftArm");
@@ -1323,6 +1326,7 @@ export function StageScene() {
     try {
       const loaded = parseScene(JSON.parse(await file.text()));
       nextId.current = Math.max(nextId.current, ...loaded.map((o) => o.id + 1));
+      record();
       setObjects(loaded);
       setSelectedId(null);
       setGizmoMode("translate");
@@ -1337,6 +1341,7 @@ export function StageScene() {
     try {
       localStorage.removeItem(STAGE_LAYOUT_KEY);
     } catch {}
+    record();
     setObjects(INITIAL_OBJECTS);
     setSelectedId(null);
     setGizmoMode("translate");
@@ -1425,6 +1430,7 @@ export function StageScene() {
     }
     // mannequin stands at y=0 — its own geometry is already floor-relative,
     // and its rest pose defaults inside the Mannequin component
+    record();
     setObjects((prev) => [...prev, base]);
     setInventoryOpen(false);
     setSelectedId(id);
@@ -1432,6 +1438,7 @@ export function StageScene() {
   }
 
   function updateWind(patch: Partial<SceneObject>) {
+    record();
     setObjects((prev) => prev.map((o) => (o.id === selectedId ? { ...o, ...patch } : o)));
   }
 
@@ -1439,6 +1446,8 @@ export function StageScene() {
   // manipulating the object it already grabbed, so the "moved" one and the
   // "left behind" one are just whichever mesh instance ends up where.
   function handleGizmoMouseDown() {
+    // One undo step per drag: the pre-drag layout (and any ctrl+drag copy).
+    record();
     if (!ctrlHeld.current || !selected || !canDuplicate) return;
     const clone: SceneObject = { ...selected, id: nextId.current++ };
     setObjects((prev) => [...prev, clone]);
@@ -1604,6 +1613,7 @@ export function StageScene() {
     if (!selected || !node || !canKeyframeSelection) return;
     const { x, y, z } = node.position;
     const rotation: Vec3 = [node.rotation.x, node.rotation.y, node.rotation.z];
+    record();
     setObjects((prev) =>
       prev.map((o) => {
         if (o.id !== selected.id) return o;
@@ -1619,6 +1629,7 @@ export function StageScene() {
     if (!selected) return;
     const { keyframes, removed } = deleteKeyframeNear(selected.keyframes, playheadTime);
     if (!removed) return;
+    record();
     setObjects((prev) =>
       prev.map((o) => {
         if (o.id !== selected.id) return o;
@@ -1696,7 +1707,7 @@ export function StageScene() {
           backdrop={backdrop}
         />
 
-        {selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && (
+        {selected && selectedNode && effectiveGizmoMode !== "pose" && !isPlaying && (
           <TransformControls
             object={selectedNode}
             mode={effectiveGizmoMode}
@@ -1707,7 +1718,7 @@ export function StageScene() {
         )}
 
         {activeJointNode && effectiveGizmoMode === "pose" && !isPlaying && (
-          <TransformControls object={activeJointNode} mode="rotate" space="local" onObjectChange={syncJointTransform} />
+          <TransformControls object={activeJointNode} mode="rotate" space="local" onMouseDown={record} onObjectChange={syncJointTransform} />
         )}
 
         {cameraObj && (
@@ -1888,6 +1899,7 @@ export function StageScene() {
                 mannequinColor={selected?.kind === "mannequin" ? (selected.color ?? DEFAULT_MANNEQUIN_COLOR) : DEFAULT_MANNEQUIN_COLOR}
                 onAssign={(castId) => {
                   if (!selected || selected.kind !== "mannequin") return;
+                  record();
                   setObjects((prev) => prev.map((o) => (o.id === selected.id ? { ...o, castId: castId ?? undefined } : o)));
                 }}
               />
@@ -2159,7 +2171,10 @@ export function StageScene() {
 
       {selected?.kind === "mannequin" && effectiveGizmoMode === "pose" && !isPlaying && (
         <PosePanel key={`${selected.id}:${selected.castId ?? "unassigned"}`} characterId={selected.castId} pose={selectedPose} joint={effectiveActiveJoint ?? "leftArm"} onSelect={setActiveJoint}
-          onChange={(pose) => writeSelectedPose(() => pose)} />
+          onChange={(pose) => {
+            record();
+            writeSelectedPose(() => pose);
+          }} />
       )}
     </div>
   );
