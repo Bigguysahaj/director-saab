@@ -1,0 +1,132 @@
+{
+  "source_image": "images/camera-angles-20.jpg",
+  "note": "18 of the chart's 20 angles. Left out #16 Tilt Up and #17 Tilt Down: they are moves, already covered by 'Tilt' in camera-moves.json. 'chart_no' is the number in the image.",
+  "items": [
+    {
+      "id": "eye-level",
+      "name": "Eye level",
+      "chart_no": 1,
+      "description": "Camera at eye level. Natural and balanced.",
+      "prompt": "eye-level shot, neutral natural angle"
+    },
+    {
+      "id": "high-angle",
+      "name": "High angle",
+      "chart_no": 2,
+      "description": "Camera above the subject; makes them look smaller.",
+      "prompt": "high angle shot looking down, subject appears small"
+    },
+    {
+      "id": "low-angle",
+      "name": "Low angle",
+      "chart_no": 3,
+      "description": "Camera below the subject; makes them look strong.",
+      "prompt": "low angle shot looking up, subject looks powerful"
+    },
+    {
+      "id": "bird-s-eye-view",
+      "name": "Bird's eye view",
+      "chart_no": 4,
+      "description": "Straight down from above; shows the whole scene.",
+      "prompt": "bird's eye view, straight down overhead shot"
+    },
+    {
+      "id": "dutch-angle",
+      "name": "Dutch angle",
+      "chart_no": 5,
+      "description": "Tilted camera; adds energy, drama and unease.",
+      "prompt": "dutch angle, tilted horizon, tension"
+    },
+    {
+      "id": "over-the-shoulder",
+      "name": "Over the shoulder",
+      "chart_no": 6,
+      "description": "Shot from behind someone's shoulder.",
+      "prompt": "over-the-shoulder shot, foreground shoulder blurred"
+    },
+    {
+      "id": "close-up",
+      "name": "Close up",
+      "chart_no": 7,
+      "description": "Close to the face; shows detail and emotion.",
+      "prompt": "close-up shot, face fills the frame, emotional detail"
+    },
+    {
+      "id": "wide-shot",
+      "name": "Wide shot",
+      "chart_no": 8,
+      "description": "More background included; shows place and space.",
+      "prompt": "wide shot, subject within the environment"
+    },
+    {
+      "id": "long-shot",
+      "name": "Long shot",
+      "chart_no": 9,
+      "description": "Full body in frame; shows subject and scene.",
+      "prompt": "long shot, full body visible in the scene"
+    },
+    {
+      "id": "pov-shot",
+      "name": "POV shot",
+      "chart_no": 10,
+      "description": "Shot from the subject's point of view.",
+      "prompt": "POV shot from the character's eyes, first person"
+    },
+    {
+      "id": "top-down",
+      "name": "Top down",
+      "chart_no": 11,
+      "description": "Shot from above at a steep angle.",
+      "prompt": "top-down shot, steep overhead angle"
+    },
+    {
+      "id": "side-angle",
+      "name": "Side angle",
+      "chart_no": 12,
+      "description": "Shot from the side; adds shape and depth.",
+      "prompt": "side angle profile shot, shape and depth"
+    },
+    {
+      "id": "back-view",
+      "name": "Back view",
+      "chart_no": 13,
+      "description": "Subject shown from behind.",
+      "prompt": "back view, subject seen from behind"
+    },
+    {
+      "id": "framed-shot",
+      "name": "Framed shot",
+      "chart_no": 14,
+      "description": "Uses something in the scene to frame the subject.",
+      "prompt": "framed shot through a doorway or arch, natural frame around subject"
+    },
+    {
+      "id": "symmetrical-shot",
+      "name": "Symmetrical shot",
+      "chart_no": 15,
+      "description": "Both sides balanced and even.",
+      "prompt": "symmetrical composition, centred subject, balanced both sides"
+    },
+    {
+      "id": "ots-close",
+      "name": "OTS close",
+      "chart_no": 18,
+      "description": "Close over-the-shoulder; more focus on the face.",
+      "prompt": "tight over-the-shoulder shot, focus on the face"
+    },
+    {
+      "id": "leading-lines",
+      "name": "Leading lines",
+      "chart_no": 19,
+      "description": "Uses lines to lead the eye to the subject.",
+      "prompt": "leading lines draw the eye to the subject, path or railing converging"
+    },
+    {
+      "id": "extreme-low-angle",
+      "name": "Extreme low angle",
+      "chart_no": 20,
+      "description": "Camera very low; makes the subject look epic.",
+      "prompt": "extreme low angle, camera at ground level, epic towering subject"
+    }
+  ]
+}

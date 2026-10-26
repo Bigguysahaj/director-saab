@@ -41,3 +41,35 @@ tool (who a director coordinates with, what a set involves) and for any
   hand or let the AI do it?
 - Copyright: keep to role/department counts and notes, not reproducing
   the credit roll itself.
+
+## Music: score and sound for the films
+
+**Origin:** saved a music production cheat sheet
+(`docs/knowledge/images/music-production-cheat-sheet.jpg`), about 100 terms
+from DAW and MIDI through mixing, mastering and song structure.
+
+**Idea:** think later about how music fits the studio (score for a Short,
+mood-matched tracks, AI music generation). Kept as a picture only for now;
+too big to turn into JSON yet.
+
+## Storyboard as a scene-planning view
+
+**Origin:** a storyboard page example
+(`docs/knowledge/images/storyboard-template-example.jpg`): six panels per
+page, each with scene, shot, shot size and aspect ratio, a sketch, and a
+one-line action note ("wide shot", "close up", "pan", "overhead").
+
+**Idea:** a storyboard page as a way to design and structure scenes before
+blocking them on `/stage`. Each panel could pair a stage snapshot with its
+shot size, camera move and note. Idea only; no design yet.
+
+## Film production map
+
+**Origin:** a film production flowchart
+(`docs/knowledge/images/film-production-flowchart.jpg`): black boxes on grid
+paper, with the stages development, pre-production, production and
+post-production, and how each step connects to the next.
+
+**Idea:** a reference for how the studio's own stages (Stage, Audition,
+Screen Test) map onto a real production, and where crew roles fit. Pairs
+with the end-credits idea above. Reference only for now.

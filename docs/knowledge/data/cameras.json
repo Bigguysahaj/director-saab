@@ -1,0 +1,216 @@
+{
+  "source_image": "images/camera-bodies-by-brand-and-use.jpg",
+  "note": "Camera bodies from the source chart, one per brand per use. Sensor sizes and megapixels are added from general knowledge, not the image: verify before relying on them.",
+  "items": [
+    {
+      "id": "fujifilm-x100vi",
+      "name": "Fujifilm X100VI",
+      "brand": "Fujifilm",
+      "use": [
+        "street"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Compact fixed-lens (23mm) rangefinder-style camera; discreet, retro looks, built-in film simulations.",
+      "prompt": "shot on Fujifilm X100VI, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "sony-a7c-ii",
+      "name": "Sony A7C II",
+      "brand": "Sony",
+      "use": [
+        "street"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. Very compact full-frame body; light and discreet with strong autofocus.",
+      "prompt": "shot on Sony A7C II, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "canon-r8",
+      "name": "Canon R8",
+      "brand": "Canon",
+      "use": [
+        "street"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. Light, affordable full-frame body with good low light and video.",
+      "prompt": "shot on Canon R8, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "nikon-zfc",
+      "name": "Nikon Zfc",
+      "brand": "Nikon",
+      "use": [
+        "street"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Retro-styled APS-C body with dials; small and stylish.",
+      "prompt": "shot on Nikon Zfc, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "lumix-gx9",
+      "name": "Lumix GX9",
+      "brand": "Panasonic Lumix",
+      "use": [
+        "street"
+      ],
+      "sensor": "Micro Four Thirds",
+      "description": "Micro Four Thirds body. Small rangefinder-style body with a tilting EVF; very pocketable with a small lens.",
+      "prompt": "shot on Lumix GX9, Micro Four Thirds sensor look, deep depth of field, compact-camera feel"
+    },
+    {
+      "id": "fujifilm-x-t5",
+      "name": "Fujifilm X-T5",
+      "brand": "Fujifilm",
+      "use": [
+        "wedding",
+        "portrait"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. High-resolution APS-C body with classic dials. The source image lists it under both Wedding and Portrait (likely a duplicate slip in the image).",
+      "prompt": "shot on Fujifilm X-T5, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "sony-a7-iv",
+      "name": "Sony A7 IV",
+      "brand": "Sony",
+      "use": [
+        "wedding"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. All-round full-frame hybrid for photo and video; reliable autofocus.",
+      "prompt": "shot on Sony A7 IV, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "canon-r6-mark-ii",
+      "name": "Canon R6 Mark II",
+      "brand": "Canon",
+      "use": [
+        "wedding"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. Fast, low-light-strong full-frame body; popular for events and weddings.",
+      "prompt": "shot on Canon R6 Mark II, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "nikon-z6-ii",
+      "name": "Nikon Z6 II",
+      "brand": "Nikon",
+      "use": [
+        "wedding"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. Solid full-frame all-rounder with dual card slots.",
+      "prompt": "shot on Nikon Z6 II, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "lumix-s5-ii",
+      "name": "Lumix S5 II",
+      "brand": "Panasonic Lumix",
+      "use": [
+        "wedding"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. Full-frame hybrid with strong video features.",
+      "prompt": "shot on Lumix S5 II, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "fujifilm-x-s20",
+      "name": "Fujifilm X-S20",
+      "brand": "Fujifilm",
+      "use": [
+        "travel"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Compact APS-C body with a big grip and good battery; vlog-friendly.",
+      "prompt": "shot on Fujifilm X-S20, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "sony-a6700",
+      "name": "Sony A6700",
+      "brand": "Sony",
+      "use": [
+        "travel"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Small APS-C body with top-tier autofocus and strong video.",
+      "prompt": "shot on Sony A6700, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "canon-r10",
+      "name": "Canon R10",
+      "brand": "Canon",
+      "use": [
+        "travel"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Entry APS-C body; light and cheap.",
+      "prompt": "shot on Canon R10, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "nikon-z50",
+      "name": "Nikon Z50",
+      "brand": "Nikon",
+      "use": [
+        "travel"
+      ],
+      "sensor": "APS-C",
+      "description": "APS-C body. Small APS-C travel body.",
+      "prompt": "shot on Nikon Z50, APS-C sensor look, slightly deeper depth of field, crisp detail"
+    },
+    {
+      "id": "lumix-g100",
+      "name": "Lumix G100",
+      "brand": "Panasonic Lumix",
+      "use": [
+        "travel"
+      ],
+      "sensor": "Micro Four Thirds",
+      "description": "Micro Four Thirds body. Tiny vlogging-oriented body with a flip screen.",
+      "prompt": "shot on Lumix G100, Micro Four Thirds sensor look, deep depth of field, compact-camera feel"
+    },
+    {
+      "id": "sony-a7r-v",
+      "name": "Sony A7R V",
+      "brand": "Sony",
+      "use": [
+        "portrait"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. High-resolution (about 61MP) full-frame body; fine detail for portraits and studio work.",
+      "prompt": "shot on Sony A7R V, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "canon-r5",
+      "name": "Canon R5",
+      "brand": "Canon",
+      "use": [
+        "portrait"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. High-resolution (about 45MP) full-frame body with strong video.",
+      "prompt": "shot on Canon R5, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "nikon-z7-ii",
+      "name": "Nikon Z7 II",
+      "brand": "Nikon",
+      "use": [
+        "portrait"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. High-resolution (about 45MP) full-frame body.",
+      "prompt": "shot on Nikon Z7 II, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    },
+    {
+      "id": "lumix-s1r",
+      "name": "Lumix S1R",
+      "brand": "Panasonic Lumix",
+      "use": [
+        "portrait"
+      ],
+      "sensor": "Full-frame",
+      "description": "Full-frame body. High-resolution (about 47MP) full-frame body, large and robust.",
+      "prompt": "shot on Lumix S1R, full-frame sensor look, shallow depth of field possible, clean low-light detail"
+    }
+  ]
+}

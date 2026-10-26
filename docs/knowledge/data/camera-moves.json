@@ -1,0 +1,80 @@
+{
+  "source_image": "images/camera-moves-cheat-sheet.jpg",
+  "note": "Hand-drawn cheat sheet. Moves only: camera positions/angles live in camera-angles.json.",
+  "items": [
+    {
+      "id": "static",
+      "name": "Static",
+      "description": "Camera locked off, no movement.",
+      "prompt": "static locked-off shot, no camera movement"
+    },
+    {
+      "id": "pan",
+      "name": "Pan",
+      "description": "Camera rotates left or right on a fixed point.",
+      "prompt": "camera pans horizontally across the scene"
+    },
+    {
+      "id": "tilt",
+      "name": "Tilt",
+      "description": "Camera rotates up or down on a fixed point.",
+      "prompt": "camera tilts vertically, up or down the subject"
+    },
+    {
+      "id": "zoom",
+      "name": "Zoom",
+      "description": "Lens focal length changes; camera stays still, framing gets tighter or wider.",
+      "prompt": "zoom in on the subject, camera stays in place"
+    },
+    {
+      "id": "roll",
+      "name": "Roll",
+      "description": "Camera rotates around its lens axis, tilting the horizon.",
+      "prompt": "camera rolls, the horizon rotates"
+    },
+    {
+      "id": "tracking-follow",
+      "name": "Tracking follow",
+      "variant": "forward/back follow",
+      "description": "Camera travels behind or ahead of a subject, moving with them (forward/back).",
+      "prompt": "tracking shot following the subject from behind, camera moves with them"
+    },
+    {
+      "id": "tracking-lateral",
+      "name": "Tracking lateral",
+      "variant": "side follow",
+      "description": "Camera travels beside the subject, matching their sideways movement.",
+      "prompt": "lateral tracking shot, camera moves sideways alongside the subject"
+    },
+    {
+      "id": "arc",
+      "name": "Arc",
+      "description": "Camera circles around the subject along a curved path.",
+      "prompt": "camera arcs around the subject, orbit move"
+    },
+    {
+      "id": "boom",
+      "name": "Boom",
+      "description": "Camera moves up or down on a crane/jib while still aimed at the subject.",
+      "prompt": "boom shot, camera rises or lowers on a crane"
+    },
+    {
+      "id": "pedestal",
+      "name": "Pedestal",
+      "description": "Camera moves straight up or down while staying level, no tilt.",
+      "prompt": "pedestal move, camera rises vertically with no tilt"
+    },
+    {
+      "id": "pull-out-dolly-out",
+      "name": "Pull out / dolly out",
+      "description": "Camera moves backward, away from the subject.",
+      "prompt": "dolly out, camera pulls back to reveal the scene"
+    },
+    {
+      "id": "push-in-dolly-in",
+      "name": "Push in / dolly in",
+      "description": "Camera moves forward toward the subject.",
+      "prompt": "dolly in, camera pushes slowly toward the subject"
+    }
+  ]
+}

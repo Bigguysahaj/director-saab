@@ -1,0 +1,48 @@
+{
+  "source_image": "images/rule-of-thirds-placements.jpg",
+  "note": "Six ways to place subjects on a 3x3 grid. Each has 4-6 variants in the source image (first variant highlighted).",
+  "items": [
+    {
+      "id": "intersection",
+      "name": "Intersection",
+      "variants": 4,
+      "description": "Subject sits on one of the four points where the grid lines cross.",
+      "prompt": "subject placed on a rule-of-thirds intersection point"
+    },
+    {
+      "id": "axis",
+      "name": "Axis",
+      "variants": 4,
+      "description": "An elongated subject follows a vertical or horizontal third line (an oval along an axis).",
+      "prompt": "subject aligned along a rule-of-thirds axis"
+    },
+    {
+      "id": "line",
+      "name": "Line",
+      "variants": 4,
+      "description": "A thin line (horizon, edge, pole) sits on a third line rather than the centre.",
+      "prompt": "horizon placed on the upper or lower third line"
+    },
+    {
+      "id": "filled-column",
+      "name": "Filled column",
+      "variants": 6,
+      "description": "One or two vertical thirds are filled with the subject; the rest left open.",
+      "prompt": "subject fills one vertical third, open space in the other two"
+    },
+    {
+      "id": "filled-row",
+      "name": "Filled row",
+      "variants": 6,
+      "description": "One or two horizontal thirds are filled with the subject or sky/ground; the rest left open.",
+      "prompt": "subject fills one horizontal third, open space in the others"
+    },
+    {
+      "id": "diagonal",
+      "name": "Diagonal",
+      "variants": 4,
+      "description": "Subject or mass runs diagonally and splits the frame along the grid.",
+      "prompt": "diagonal composition splitting the frame across thirds"
+    }
+  ]
+}

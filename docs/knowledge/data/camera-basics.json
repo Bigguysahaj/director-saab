@@ -1,0 +1,132 @@
+{
+  "source_image": "images/camera-basics-aperture-shutter-iso.jpg",
+  "note": "Exposure triangle: aperture (depth of field), shutter speed (motion), ISO (noise).",
+  "groups": {
+    "aperture": [
+      {
+        "id": "f-1-4",
+        "name": "f/1.4",
+        "description": "very wide opening; very shallow depth of field, lots of light",
+        "prompt": "very shallow depth of field, creamy blurred background"
+      },
+      {
+        "id": "f-2",
+        "name": "f/2",
+        "description": "wide; shallow depth of field, good in low light",
+        "prompt": "shallow depth of field, soft background"
+      },
+      {
+        "id": "f-2-8",
+        "name": "f/2.8",
+        "description": "wide; shallow depth of field, standard pro zoom aperture",
+        "prompt": "shallow depth of field, subject isolation"
+      },
+      {
+        "id": "f-4",
+        "name": "f/4",
+        "description": "moderate; some background blur, a bit more in focus",
+        "prompt": "moderate depth of field"
+      },
+      {
+        "id": "f-5-6",
+        "name": "f/5.6",
+        "description": "moderate; most of a subject in focus, good lens sharpness",
+        "prompt": "moderate depth of field, sharp subject"
+      },
+      {
+        "id": "f-8",
+        "name": "f/8",
+        "description": "narrow; deep depth of field, usually the sharpest",
+        "prompt": "deep depth of field, sharp from front to back"
+      },
+      {
+        "id": "f-11",
+        "name": "f/11",
+        "description": "narrow; deep focus, landscapes",
+        "prompt": "deep focus landscape sharpness"
+      },
+      {
+        "id": "f-16",
+        "name": "f/16",
+        "description": "very narrow; maximum depth of field, less light",
+        "prompt": "maximum depth of field, everything sharp, slight diffraction softness"
+      }
+    ],
+    "shutter_speed": [
+      {
+        "id": "1-1000-sec",
+        "name": "1/1000 sec",
+        "description": "freezes fast action completely",
+        "prompt": "frozen motion, razor-sharp action"
+      },
+      {
+        "id": "1-250-sec",
+        "name": "1/250 sec",
+        "description": "sharp for most movement",
+        "prompt": "sharp subject, minimal blur"
+      },
+      {
+        "id": "1-100-sec",
+        "name": "1/100 sec",
+        "description": "sharp for walking, slight blur on fast movement",
+        "prompt": "natural motion, slight blur on fast limbs"
+      },
+      {
+        "id": "1-50-sec",
+        "name": "1/50 sec",
+        "description": "visible blur on moving subjects",
+        "prompt": "slight motion blur, handheld-limit look"
+      },
+      {
+        "id": "1-15-sec",
+        "name": "1/15 sec",
+        "description": "strong blur; needs a tripod for still subjects",
+        "prompt": "strong motion blur, streaked movement"
+      },
+      {
+        "id": "1-4-sec",
+        "name": "1/4 sec",
+        "description": "extreme blur; long-exposure feel",
+        "prompt": "heavy motion blur, long exposure smear"
+      }
+    ],
+    "iso": [
+      {
+        "id": "iso-50",
+        "name": "ISO 50",
+        "description": "cleanest image, needs lots of light",
+        "prompt": "extremely clean image, no noise"
+      },
+      {
+        "id": "iso-100",
+        "name": "ISO 100",
+        "description": "clean, base sensitivity for bright light",
+        "prompt": "clean image, no visible noise"
+      },
+      {
+        "id": "iso-200",
+        "name": "ISO 200",
+        "description": "clean, slight noise appears",
+        "prompt": "very slight grain"
+      },
+      {
+        "id": "iso-400",
+        "name": "ISO 400",
+        "description": "visible grain begins",
+        "prompt": "light visible grain"
+      },
+      {
+        "id": "iso-800",
+        "name": "ISO 800",
+        "description": "noticeable noise, used in dim light",
+        "prompt": "noticeable grain, dim-light look"
+      },
+      {
+        "id": "iso-1600",
+        "name": "ISO 1600",
+        "description": "heavy noise, for dark scenes",
+        "prompt": "heavy grain, high-ISO noisy look"
+      }
+    ]
+  }
+}

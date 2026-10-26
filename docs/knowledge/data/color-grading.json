@@ -1,0 +1,63 @@
+{
+  "source_image": "images/histogram-how-to-read.jpg",
+  "note": "How to read a histogram. X axis is brightness 0 (black) to 255 (white); Y axis is the number of pixels. The shadows/midtones/highlights split is thirds of the axis; the image only shows the labels, the exact boundaries are an assumption.",
+  "items": [
+    {
+      "id": "shadows",
+      "name": "Shadows",
+      "range": "0-85",
+      "description": "Left third of the histogram (about 0-85). Dark areas; crushed if the graph piles up at the very left edge.",
+      "prompt": "deep shadows, rich dark tones with retained detail, lifted blacks"
+    },
+    {
+      "id": "midtones",
+      "name": "Midtones",
+      "range": "85-170",
+      "description": "Middle of the histogram (about 85-170). Most of the picture's information: skin and general scene brightness.",
+      "prompt": "balanced midtones, natural skin tones, neutral exposure"
+    },
+    {
+      "id": "highlights",
+      "name": "Highlights",
+      "range": "170-255",
+      "description": "Right third (about 170-255). Bright areas; clipped if the graph piles up at the right edge.",
+      "prompt": "bright highlights with retained detail, soft highlight roll-off, no clipping"
+    },
+    {
+      "id": "tonal-range",
+      "name": "Tonal range",
+      "description": "The span between the darkest and brightest pixels. A wide span means the full tonal range is used.",
+      "prompt": "full tonal range from deep blacks to bright whites"
+    },
+    {
+      "id": "properly-exposed",
+      "name": "Properly exposed",
+      "description": "Bell-shaped graph centred in the middle, tapering to both edges without touching them.",
+      "prompt": "well exposed, balanced histogram, detail in shadows and highlights"
+    },
+    {
+      "id": "underexposed",
+      "name": "Underexposed",
+      "description": "Graph bunched against the left edge. Image is too dark; shadow detail is lost.",
+      "prompt": "underexposed dark image, crushed shadows, low-key gloom"
+    },
+    {
+      "id": "overexposed",
+      "name": "Overexposed",
+      "description": "Graph bunched against the right edge. Image is too bright; highlights are blown.",
+      "prompt": "overexposed bright image, blown-out highlights, washed-out high-key look"
+    },
+    {
+      "id": "low-contrast",
+      "name": "Low contrast",
+      "description": "A narrow spike in the middle with empty ends. Flat, hazy image with little separation between tones.",
+      "prompt": "low contrast flat look, muted tones, hazy soft grade"
+    },
+    {
+      "id": "high-contrast",
+      "name": "High contrast",
+      "description": "Two heavy peaks at the far left and far right with a gap in the middle. Strong darks and brights with little between.",
+      "prompt": "high contrast punchy grade, deep blacks and bright whites, dramatic look"
+    }
+  ]
+}

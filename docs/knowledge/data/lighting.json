@@ -1,0 +1,84 @@
+{
+  "source_image": "images/lighting-modifiers.jpg",
+  "note": "Light modifiers (what goes on the light). Labels follow the source image; 'A parable' there reads as parabolic.",
+  "items": [
+    {
+      "id": "reflection-umbrella",
+      "name": "Reflection umbrella",
+      "description": "Black-backed umbrella with a white interior; light bounces off the inside. Cheap, fast, broad and fairly soft, spills everywhere.",
+      "prompt": "soft broad bounced light from a large white umbrella, even fill, gentle falloff, slight spill"
+    },
+    {
+      "id": "octabox",
+      "name": "Octabox",
+      "description": "Eight-sided softbox. Soft light with round catchlights, a classic for portraits.",
+      "prompt": "large octagonal softbox key light, soft wrapping light, round catchlights in the eyes"
+    },
+    {
+      "id": "parabolic-softbox",
+      "name": "Parabolic softbox",
+      "description": "Deep parabolic dish with a diffuser. Soft but more controlled and punchy than a flat softbox, with contrasty modelling.",
+      "prompt": "deep parabolic softbox, soft yet directional light, crisp shadow edge with gentle transition, high-end portrait look"
+    },
+    {
+      "id": "softbox",
+      "name": "Softbox",
+      "description": "Rectangular box with a diffusion front. The standard soft key/fill: wraps around the subject, shadow edges are soft.",
+      "prompt": "soft rectangular softbox key light, smooth skin-flattering light, soft shadow edges"
+    },
+    {
+      "id": "strip-box",
+      "name": "Strip box",
+      "description": "Tall narrow softbox (image says 'comic strip'). Gives long thin highlights; used for rim, edge and separation light.",
+      "prompt": "strip softbox rim light from behind, thin bright edge highlight along the silhouette, dark background"
+    },
+    {
+      "id": "lightdome",
+      "name": "Lightdome",
+      "description": "Large dome-shaped soft modifier. Very even, enveloping light with little shadow.",
+      "prompt": "large lightdome, very even wraparound soft light, minimal shadows, clean studio look"
+    },
+    {
+      "id": "china-ball",
+      "name": "China ball",
+      "description": "Round paper/fabric lantern. Omnidirectional soft glow, great for practical-looking ambient light over a set or table.",
+      "prompt": "warm glowing paper lantern overhead, soft omnidirectional ambient light, natural practical look"
+    },
+    {
+      "id": "spotlight-reflector",
+      "name": "Spotlight reflector",
+      "description": "Standard metal reflector (image says 'spotlight'). Hard, punchy, directional light with defined shadows.",
+      "prompt": "hard directional light, sharp defined shadows, high contrast, strong highlights"
+    },
+    {
+      "id": "fresnel-lens",
+      "name": "Fresnel lens",
+      "description": "Stepped-glass lens on a studio or cine light. Adjustable spot-to-flood beam, hard light with a soft-edged falloff, the cinema classic.",
+      "prompt": "fresnel spotlight, hard cinematic key light with a soft beam edge, strong directional shadows"
+    },
+    {
+      "id": "spot-projector",
+      "name": "Spot projector",
+      "description": "Optical spotlight attachment (image says 'spotted'). Projects a sharp-edged beam and can carry gobos/cut-outs to throw shapes.",
+      "prompt": "sharp-edged projected spot of light, gobo pattern shadows on the wall, theatrical focused beam"
+    },
+    {
+      "id": "telezoom-reflector",
+      "name": "Telezoom reflector",
+      "description": "Long narrow-beam reflector. Hard light that carries a distance with a tight, controllable cone.",
+      "prompt": "narrow tight beam of hard light, strong localised pool of light, dark surroundings"
+    },
+    {
+      "id": "snoot-honeycomb-tube",
+      "name": "Snoot / honeycomb tube",
+      "description": "Conical tube or grid cone (image says 'teat/tube'). Narrows light to a small tight circle; used for hair, accent and highlight spots.",
+      "prompt": "tightly controlled small circle of light, snoot accent light on hair and face, deep shadows around"
+    },
+    {
+      "id": "beauty-dish",
+      "name": "Beauty dish",
+      "description": "Shallow dish with a centre deflector. Crisp yet soft: contrasty, sculpting light with defined cheekbones; fashion and beauty staple.",
+      "prompt": "beauty dish key light from above-front, sculpted cheekbones, crisp but flattering light, fashion beauty portrait"
+    }
+  ]
+}

@@ -1,0 +1,256 @@
+{
+  "source_image": "images/camera-lenses-by-brand-and-use.jpg",
+  "note": "One lens per brand per use-case from the source chart. 'use' is the chart's column (Portrait / Sports / Wedding / Street / Travel).",
+  "items": [
+    {
+      "id": "fujinon-xf-56mm-f-1-2-r-wr",
+      "name": "Fujinon XF 56mm f/1.2 R WR",
+      "brand": "Fujifilm",
+      "use": "Portrait",
+      "focal_mm": "56",
+      "aperture": "f/1.2",
+      "description": "Fujifilm APS-C: 56mm is roughly an 85mm full-frame field of view. 56mm f/1.2 short telephoto portrait lens; flattering compression, creamy background blur.",
+      "prompt": "85mm portrait lens look, shallow depth of field, creamy bokeh, flattering facial compression, subject sharp against a soft background, 56mm f/1.2"
+    },
+    {
+      "id": "fujifilm-xf-150-600mm-f-5-6-8-r-lm-ois-wr",
+      "name": "Fujifilm XF 150-600mm f/5.6-8 R LM OIS WR",
+      "brand": "Fujifilm",
+      "use": "Sports",
+      "focal_mm": "150-600",
+      "aperture": "f/5.6-8",
+      "description": "Fujifilm APS-C: roughly 225-900mm full-frame equivalent. 150-600mm f/5.6-8 long telephoto zoom; pulls distant action close, strongly compressed background.",
+      "prompt": "telephoto lens compression, distant action pulled close, subject isolated against a heavily blurred background, 150-600mm f/5.6-8"
+    },
+    {
+      "id": "fujinon-xf-16-55mm-f-2-8-r-lm-wr",
+      "name": "Fujinon XF 16-55mm f/2.8 R LM WR",
+      "brand": "Fujifilm",
+      "use": "Wedding",
+      "focal_mm": "16-55",
+      "aperture": "f/2.8",
+      "description": "Fujifilm APS-C: roughly 24-84mm full-frame equivalent. 16-55mm f/2.8 standard zoom; covers wide to short tele for fast-changing events.",
+      "prompt": "standard zoom field of view, natural perspective, moderate depth of field, documentary event look, 16-55mm f/2.8"
+    },
+    {
+      "id": "fujinon-xf-23mm-f-2-r-wr",
+      "name": "Fujinon XF 23mm f/2 R WR",
+      "brand": "Fujifilm",
+      "use": "Street",
+      "focal_mm": "23",
+      "aperture": "f/2",
+      "description": "Fujifilm APS-C: 23mm is roughly a 35mm full-frame field of view. 23mm f/2 compact wide/normal prime; natural perspective, unobtrusive and quick to use.",
+      "prompt": "35mm street photography look, natural perspective, candid framing, context visible around the subject, 23mm f/2"
+    },
+    {
+      "id": "fujinon-xf-16-80mm-f-4-r-ois-wr",
+      "name": "Fujinon XF 16-80mm f/4 R OIS WR",
+      "brand": "Fujifilm",
+      "use": "Travel",
+      "focal_mm": "16-80",
+      "aperture": "f/4",
+      "description": "Fujifilm APS-C: roughly 24-120mm full-frame equivalent. 16-80mm f/4 versatile walk-around zoom; wide enough for landscapes, long enough for details.",
+      "prompt": "walk-around zoom field of view, deep depth of field, landscape and detail framing, travel photography look, 16-80mm f/4"
+    },
+    {
+      "id": "sony-fe-85mm-f-1-4-gm",
+      "name": "Sony FE 85mm f/1.4 GM",
+      "brand": "Sony",
+      "use": "Portrait",
+      "focal_mm": "85",
+      "aperture": "f/1.4",
+      "description": "85mm f/1.4 short telephoto portrait lens; flattering compression, creamy background blur.",
+      "prompt": "85mm portrait lens look, shallow depth of field, creamy bokeh, flattering facial compression, subject sharp against a soft background, 85mm f/1.4"
+    },
+    {
+      "id": "sony-fe-70-200mm-f-2-8-gm-oss-ii",
+      "name": "Sony FE 70-200mm f/2.8 GM OSS II",
+      "brand": "Sony",
+      "use": "Sports",
+      "focal_mm": "70-200",
+      "aperture": "f/2.8",
+      "description": "70-200mm f/2.8 long telephoto zoom; pulls distant action close, strongly compressed background.",
+      "prompt": "telephoto lens compression, distant action pulled close, subject isolated against a heavily blurred background, 70-200mm f/2.8"
+    },
+    {
+      "id": "sony-fe-24-70mm-f-2-8-gm-ii",
+      "name": "Sony FE 24-70mm f/2.8 GM II",
+      "brand": "Sony",
+      "use": "Wedding",
+      "focal_mm": "24-70",
+      "aperture": "f/2.8",
+      "description": "24-70mm f/2.8 standard zoom; covers wide to short tele for fast-changing events.",
+      "prompt": "standard zoom field of view, natural perspective, moderate depth of field, documentary event look, 24-70mm f/2.8"
+    },
+    {
+      "id": "sony-fe-35mm-f-1-8",
+      "name": "Sony FE 35mm f/1.8",
+      "brand": "Sony",
+      "use": "Street",
+      "focal_mm": "35",
+      "aperture": "f/1.8",
+      "description": "35mm f/1.8 compact wide/normal prime; natural perspective, unobtrusive and quick to use.",
+      "prompt": "35mm street photography look, natural perspective, candid framing, context visible around the subject, 35mm f/1.8"
+    },
+    {
+      "id": "sony-fe-24-105mm-f-4-g-oss",
+      "name": "Sony FE 24-105mm f/4 G OSS",
+      "brand": "Sony",
+      "use": "Travel",
+      "focal_mm": "24-105",
+      "aperture": "f/4",
+      "description": "24-105mm f/4 versatile walk-around zoom; wide enough for landscapes, long enough for details.",
+      "prompt": "walk-around zoom field of view, deep depth of field, landscape and detail framing, travel photography look, 24-105mm f/4"
+    },
+    {
+      "id": "canon-rf-85mm-f-1-2l-usm",
+      "name": "Canon RF 85mm f/1.2L USM",
+      "brand": "Canon",
+      "use": "Portrait",
+      "focal_mm": "85",
+      "aperture": "f/1.2",
+      "description": "85mm f/1.2 short telephoto portrait lens; flattering compression, creamy background blur.",
+      "prompt": "85mm portrait lens look, shallow depth of field, creamy bokeh, flattering facial compression, subject sharp against a soft background, 85mm f/1.2"
+    },
+    {
+      "id": "canon-rf-70-200mm-f-2-8l-is-usm",
+      "name": "Canon RF 70-200mm f/2.8L IS USM",
+      "brand": "Canon",
+      "use": "Sports",
+      "focal_mm": "70-200",
+      "aperture": "f/2.8",
+      "description": "70-200mm f/2.8 long telephoto zoom; pulls distant action close, strongly compressed background.",
+      "prompt": "telephoto lens compression, distant action pulled close, subject isolated against a heavily blurred background, 70-200mm f/2.8"
+    },
+    {
+      "id": "canon-rf-28-70mm-f-2l-usm",
+      "name": "Canon RF 28-70mm f/2L USM",
+      "brand": "Canon",
+      "use": "Wedding",
+      "focal_mm": "28-70",
+      "aperture": "f/2",
+      "description": "28-70mm f/2 standard zoom; covers wide to short tele for fast-changing events.",
+      "prompt": "standard zoom field of view, natural perspective, moderate depth of field, documentary event look, 28-70mm f/2"
+    },
+    {
+      "id": "canon-rf-35mm-f-1-8-is-stm",
+      "name": "Canon RF 35mm f/1.8 IS STM",
+      "brand": "Canon",
+      "use": "Street",
+      "focal_mm": "35",
+      "aperture": "f/1.8",
+      "description": "35mm f/1.8 compact wide/normal prime; natural perspective, unobtrusive and quick to use.",
+      "prompt": "35mm street photography look, natural perspective, candid framing, context visible around the subject, 35mm f/1.8"
+    },
+    {
+      "id": "canon-rf-24-105mm-f-4l-is-usm",
+      "name": "Canon RF 24-105mm f/4L IS USM",
+      "brand": "Canon",
+      "use": "Travel",
+      "focal_mm": "24-105",
+      "aperture": "f/4",
+      "description": "24-105mm f/4 versatile walk-around zoom; wide enough for landscapes, long enough for details.",
+      "prompt": "walk-around zoom field of view, deep depth of field, landscape and detail framing, travel photography look, 24-105mm f/4"
+    },
+    {
+      "id": "nikkor-z-85mm-f-1-8-s",
+      "name": "Nikkor Z 85mm f/1.8 S",
+      "brand": "Nikon",
+      "use": "Portrait",
+      "focal_mm": "85",
+      "aperture": "f/1.8",
+      "description": "85mm f/1.8 short telephoto portrait lens; flattering compression, creamy background blur.",
+      "prompt": "85mm portrait lens look, shallow depth of field, creamy bokeh, flattering facial compression, subject sharp against a soft background, 85mm f/1.8"
+    },
+    {
+      "id": "nikkor-z-70-200mm-f-2-8-vr-s",
+      "name": "Nikkor Z 70-200mm f/2.8 VR S",
+      "brand": "Nikon",
+      "use": "Sports",
+      "focal_mm": "70-200",
+      "aperture": "f/2.8",
+      "description": "70-200mm f/2.8 long telephoto zoom; pulls distant action close, strongly compressed background.",
+      "prompt": "telephoto lens compression, distant action pulled close, subject isolated against a heavily blurred background, 70-200mm f/2.8"
+    },
+    {
+      "id": "nikkor-z-24-70mm-f-2-8-s",
+      "name": "Nikkor Z 24-70mm f/2.8 S",
+      "brand": "Nikon",
+      "use": "Wedding",
+      "focal_mm": "24-70",
+      "aperture": "f/2.8",
+      "description": "24-70mm f/2.8 standard zoom; covers wide to short tele for fast-changing events.",
+      "prompt": "standard zoom field of view, natural perspective, moderate depth of field, documentary event look, 24-70mm f/2.8"
+    },
+    {
+      "id": "nikkor-z-28mm-f-2-8",
+      "name": "Nikkor Z 28mm f/2.8",
+      "brand": "Nikon",
+      "use": "Street",
+      "focal_mm": "28",
+      "aperture": "f/2.8",
+      "description": "28mm f/2.8 compact wide/normal prime; natural perspective, unobtrusive and quick to use.",
+      "prompt": "35mm street photography look, natural perspective, candid framing, context visible around the subject, 28mm f/2.8"
+    },
+    {
+      "id": "nikkor-z-24-120mm-f-4-s",
+      "name": "Nikkor Z 24-120mm f/4 S",
+      "brand": "Nikon",
+      "use": "Travel",
+      "focal_mm": "24-120",
+      "aperture": "f/4",
+      "description": "24-120mm f/4 versatile walk-around zoom; wide enough for landscapes, long enough for details.",
+      "prompt": "walk-around zoom field of view, deep depth of field, landscape and detail framing, travel photography look, 24-120mm f/4"
+    },
+    {
+      "id": "sigma-85mm-f-1-4-dg-dn-art",
+      "name": "Sigma 85mm f/1.4 DG DN Art",
+      "brand": "Sigma",
+      "use": "Portrait",
+      "focal_mm": "85",
+      "aperture": "f/1.4",
+      "description": "85mm f/1.4 short telephoto portrait lens; flattering compression, creamy background blur.",
+      "prompt": "85mm portrait lens look, shallow depth of field, creamy bokeh, flattering facial compression, subject sharp against a soft background, 85mm f/1.4"
+    },
+    {
+      "id": "sigma-70-200mm-f-2-8-dg-dn-os",
+      "name": "Sigma 70-200mm f/2.8 DG DN OS",
+      "brand": "Sigma",
+      "use": "Sports",
+      "focal_mm": "70-200",
+      "aperture": "f/2.8",
+      "description": "70-200mm f/2.8 long telephoto zoom; pulls distant action close, strongly compressed background.",
+      "prompt": "telephoto lens compression, distant action pulled close, subject isolated against a heavily blurred background, 70-200mm f/2.8"
+    },
+    {
+      "id": "sigma-24-70mm-f-2-8-dg-dn-art",
+      "name": "Sigma 24-70mm f/2.8 DG DN Art",
+      "brand": "Sigma",
+      "use": "Wedding",
+      "focal_mm": "24-70",
+      "aperture": "f/2.8",
+      "description": "24-70mm f/2.8 standard zoom; covers wide to short tele for fast-changing events.",
+      "prompt": "standard zoom field of view, natural perspective, moderate depth of field, documentary event look, 24-70mm f/2.8"
+    },
+    {
+      "id": "sigma-35mm-f-1-4-dg-dn-art",
+      "name": "Sigma 35mm f/1.4 DG DN Art",
+      "brand": "Sigma",
+      "use": "Street",
+      "focal_mm": "35",
+      "aperture": "f/1.4",
+      "description": "35mm f/1.4 compact wide/normal prime; natural perspective, unobtrusive and quick to use.",
+      "prompt": "35mm street photography look, natural perspective, candid framing, context visible around the subject, 35mm f/1.4"
+    },
+    {
+      "id": "sigma-24-105mm-f-4-dg-os-hsm-art",
+      "name": "Sigma 24-105mm f/4 DG OS HSM Art",
+      "brand": "Sigma",
+      "use": "Travel",
+      "focal_mm": "24-105",
+      "aperture": "f/4",
+      "description": "24-105mm f/4 versatile walk-around zoom; wide enough for landscapes, long enough for details.",
+      "prompt": "walk-around zoom field of view, deep depth of field, landscape and detail framing, travel photography look, 24-105mm f/4"
+    }
+  ]
+}
