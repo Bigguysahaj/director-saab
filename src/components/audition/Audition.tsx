@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHARACTER_SHEET_COST, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
+import { CHARACTER_SHEET_COST, CHARACTER_SHEET_MODEL, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
 import {
   blobToDataUrl,
   createMember,
@@ -15,7 +15,11 @@ import {
 } from "@/lib/cast";
 import { loadProjects, type Project } from "@/lib/projects";
 import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
+import { ImageModelSelect } from "@/components/ImageModelSelect";
+import type { ImageModel } from "@/lib/types";
 import { CastColorMark } from "./CastColorMark";
+
+const SHEET_MODEL_KEY = "director:cast-sheet-model";
 
 function fileToDataUrl(file: File): Promise<string> {
   return blobToDataUrl(file);
@@ -27,7 +31,7 @@ function fileToDataUrl(file: File): Promise<string> {
  * one-call cost evenly across them so per-member "spent" totals still add
  * up to what was actually billed.
  */
-function cropGrid(gridImage: string, cost: number): Promise<Record<string, CastMemberShot>> {
+function cropGrid(gridImage: string, cost: number, model?: string): Promise<Record<string, CastMemberShot>> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -48,7 +52,7 @@ function cropGrid(gridImage: string, cost: number): Promise<Record<string, CastM
         const row = Math.floor(i / GRID_SIZE);
         ctx.clearRect(0, 0, cellW, cellH);
         ctx.drawImage(img, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
-        shots[shot.id] = { image: canvas.toDataURL("image/jpeg", 0.92), cost: perShotCost };
+        shots[shot.id] = { image: canvas.toDataURL("image/jpeg", 0.92), cost: perShotCost, model };
       });
       resolve(shots);
     };
@@ -81,6 +85,28 @@ export function Audition() {
   const [castError, setCastError] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [addingFromSheet, setAddingFromSheet] = useState(false);
+  const [sheetModels, setSheetModels] = useState<ImageModel[]>([]);
+  const [sheetModel, setSheetModel] = useState(CHARACTER_SHEET_MODEL);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/image-models")
+      .then((res) => res.json())
+      .then((data: { models: ImageModel[] }) => {
+        if (cancelled) return;
+        setSheetModels(data.models);
+        let saved: string | null = null;
+        try { saved = localStorage.getItem(SHEET_MODEL_KEY); } catch {}
+        if (saved && data.models.some((m) => m.id === saved)) setSheetModel(saved);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  function pickSheetModel(id: string) {
+    setSheetModel(id);
+    try { localStorage.setItem(SHEET_MODEL_KEY, id); } catch {}
+  }
 
   useEffect(() => {
     // Matches Studio.tsx's `takes` load: the roster renders visible DOM, so
@@ -135,11 +161,11 @@ export function Audition() {
       const res = await fetch("/api/character-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo: photoDataUrl }),
+        body: JSON.stringify({ photo: photoDataUrl, model: sheetModel }),
       });
       const data = await res.json();
       if (res.ok) {
-        const shots = await cropGrid(data.image, data.cost);
+        const shots = await cropGrid(data.image, data.cost, data.model);
         await patchMember(member.id, { shots });
       }
     } catch {
@@ -197,6 +223,10 @@ export function Audition() {
           onCancel={() => setAddingFromSheet(false)}
         />
       )}
+
+      <div className="mb-6">
+        <ImageModelSelect label="Image model" models={sheetModels} value={sheetModel} onChange={pickSheetModel} disabled={generatingId !== null} />
+      </div>
 
       {castError && <p role="alert" className="mb-4 text-sm text-warn">{castError}</p>}
       {projectId && cast.length === 0 && !addingFromSheet && (

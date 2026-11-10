@@ -14,7 +14,7 @@ import { projectDir, resolveProjectId } from "./projectStore";
  * member's images live in their own subfolder.
  */
 
-export type StoredShot = { file: string; cost: number };
+export type StoredShot = { file: string; cost: number; model?: string };
 
 export type StoredCastMember = {
   id: string;
@@ -108,7 +108,7 @@ export async function updateMember(
   patch: {
     name?: string;
     photoDataUrl?: string;
-    shots?: Record<string, { image: string; cost: number }>;
+    shots?: Record<string, { image: string; cost: number; model?: string }>;
     stageColor?: string | null;
     sheetDataUrl?: string;
     closeupDataUrl?: string;
@@ -144,7 +144,7 @@ export async function updateMember(
   if (patch.shots) {
     const shots: Record<string, StoredShot> = {};
     for (const [shotId, shot] of Object.entries(patch.shots)) {
-      shots[shotId] = { file: await saveMemberImage(projectId, id, shotId, shot.image), cost: shot.cost };
+      shots[shotId] = { file: await saveMemberImage(projectId, id, shotId, shot.image), cost: shot.cost, model: shot.model };
     }
     member.shots = shots;
   }
@@ -185,7 +185,7 @@ export function toClientMember(projectId: string, m: StoredCastMember) {
     shots: Object.fromEntries(
       Object.entries(m.shots).map(([shotId, s]) => [
         shotId,
-        { image: file(s.file), cost: s.cost },
+        { image: file(s.file), cost: s.cost, model: s.model },
       ])
     ),
     stageColor: m.stageColor ?? null,

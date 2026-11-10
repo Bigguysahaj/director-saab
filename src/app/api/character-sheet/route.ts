@@ -19,17 +19,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const body = (await req.json()) as { photo?: string };
+  const body = (await req.json()) as { photo?: string; model?: unknown };
   if (!body.photo) {
     return NextResponse.json(
       { error: "photo (data URL) is required" },
       { status: 400 }
     );
   }
+  if (body.model !== undefined && (typeof body.model !== "string" || !body.model)) {
+    return NextResponse.json({ error: "model must be a non-empty string" }, { status: 400 });
+  }
+  const model = (body.model as string | undefined) ?? CHARACTER_SHEET_MODEL;
 
   try {
     const result = await generateImage({
-      model: CHARACTER_SHEET_MODEL,
+      model,
       prompt: buildCharacterSheetGridPrompt(),
       input_references: [{ type: "image_url", image_url: { url: body.photo } }],
     });
@@ -38,7 +42,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       image: `data:${image.media_type};base64,${image.b64_json}`,
-      cost: CHARACTER_SHEET_COST_PER_IMAGE,
+      cost: result.usage?.cost ?? CHARACTER_SHEET_COST_PER_IMAGE,
+      model,
     });
   } catch (err) {
     return NextResponse.json(
