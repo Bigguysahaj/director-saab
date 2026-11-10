@@ -301,7 +301,7 @@ function CastCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           {member.photo || member.sheet ? (
-            <button type="button" onClick={() => setViewing({ src: member.photo || member.sheet, label: member.name })} className="shrink-0">
+            <button type="button" onClick={() => setViewing({ src: member.photo || member.sheet, label: member.name })} className="shrink-0 cursor-zoom-in">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={member.photo || member.sheet} alt={member.name} className="h-20 w-20 rounded-xl object-cover" />
             </button>
@@ -380,7 +380,7 @@ function CastCard({
                 <div key={shot.id} className="flex flex-col items-center gap-1">
                   <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-bg">
                     {result ? (
-                      <button type="button" onClick={() => setViewing({ src: result.image, label: shot.label })} className="h-full w-full">
+                      <button type="button" onClick={() => setViewing({ src: result.image, label: shot.label })} className="h-full w-full cursor-zoom-in">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={result.image} alt={shot.label} className="h-full w-full object-cover" />
                       </button>
