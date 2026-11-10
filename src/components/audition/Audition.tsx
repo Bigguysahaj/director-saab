@@ -141,6 +141,7 @@ export function Audition() {
   ) {
     const updated = await updateMember(id, patch, projectId ?? undefined);
     setCast((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    return updated;
   }
 
   async function handlePhoto(id: string, file: File | null) {
@@ -292,7 +293,7 @@ function CastCard({
   models: ImageModel[];
   model: string;
   onModel: (id: string) => void;
-  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<void>;
+  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<CastMember>;
   generating: boolean;
   onRename: (name: string) => void;
   onPhoto: (file: File | null) => void;
@@ -432,7 +433,11 @@ const candidateFilename = (url: string) => decodeURIComponent(new URL(url, "http
 
 const smallButton = "rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg disabled:opacity-40";
 
-/** Main sheet + close-up + candidates, and the edit flow (one paid call, then Discard / Replace main / Keep as candidate). */
+/**
+ * Main sheet + close-up + candidates, and the edit flow. Every paid edit is
+ * saved as a candidate as soon as it returns, so leaving the page loses nothing;
+ * Discard deletes it, Replace main promotes it.
+ */
 function SheetPanel({
   member,
   models,
@@ -446,14 +451,14 @@ function SheetPanel({
   models: ImageModel[];
   model: string;
   onModel: (id: string) => void;
-  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<void>;
+  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<CastMember>;
   onView: (v: { src: string; label: string }) => void;
   busy: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null); // URL of the saved candidate
   const [error, setError] = useState<string | null>(null);
   const candidates = member.candidates ?? [];
   const disabled = busy || running;
@@ -470,7 +475,8 @@ function SheetPanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Edit failed");
-      setResult(data.image);
+      const updated = await onPatch({ addCandidate: data.image });
+      setResult(updated.candidates.at(-1) ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Edit failed");
     } finally {
@@ -478,14 +484,18 @@ function SheetPanel({
     }
   }
 
+  function closeEdit() {
+    setResult(null);
+    setEditing(false);
+    setPrompt("");
+  }
+
   async function save(patch: Parameters<typeof updateMember>[1]) {
     setRunning(true);
     setError(null);
     try {
       await onPatch(patch);
-      setResult(null);
-      setEditing(false);
-      setPrompt("");
+      closeEdit();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -542,7 +552,7 @@ function SheetPanel({
             <button type="button" disabled={disabled || !prompt.trim()} onClick={() => void runEdit()} className="rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40">
               {running && !result ? "Editing…" : "Run edit"}
             </button>
-            <button type="button" disabled={running} onClick={() => { setEditing(false); setResult(null); }} className={smallButton}>Cancel</button>
+            {!result && <button type="button" disabled={running} onClick={closeEdit} className={smallButton}>Cancel</button>}
           </div>
           {error && <p role="alert" className="text-sm text-warn">{error}</p>}
           {result && (
@@ -558,9 +568,9 @@ function SheetPanel({
                 </figure>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={disabled} onClick={() => setResult(null)} className={smallButton}>Discard</button>
-                <button type="button" disabled={disabled} onClick={() => void save({ sheet: result })} className={smallButton}>Replace main</button>
-                <button type="button" disabled={disabled} onClick={() => void save({ addCandidate: result })} className={smallButton}>Keep as candidate</button>
+                <button type="button" disabled={disabled} onClick={() => void save({ deleteCandidate: candidateFilename(result) })} className={smallButton}>Discard</button>
+                <button type="button" disabled={disabled} onClick={() => void save({ promoteCandidate: candidateFilename(result) })} className={smallButton}>Replace main</button>
+                <button type="button" disabled={disabled} onClick={closeEdit} className={smallButton}>Keep as candidate</button>
               </div>
             </div>
           )}

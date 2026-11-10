@@ -102,8 +102,11 @@ const SHEET = "/api/cast/m1/file/sheet.png?project=p1";
 const CLOSEUP = "/api/cast/m1/file/closeup.png?project=p1";
 const CAND = "/api/cast/m1/file/candidate-abc.png?project=p1";
 
+const SAVED: Member = { id: "m1", name: "Ana", photo: "", shots: {}, stageColor: null, sheet: SHEET, closeup: "", candidates: [CAND] };
+
 async function openEdit() {
   setup({ photo: "", sheet: SHEET });
+  patchResponse = SAVED;
   fireEvent.click(await screen.findByRole("button", { name: "Edit sheet" }));
   await screen.findAllByRole("option", { name: /Seedream 5.0 Flash/ });
   fireEvent.change(screen.getByLabelText("Edit model"), { target: { value: FLASH } });
@@ -132,7 +135,7 @@ describe("Audition supplied sheet", () => {
     expect(screen.getByText("est. $0.034")).toBeTruthy();
   });
 
-  it("edits the sheet with one call and shows old next to new", async () => {
+  it("edits the sheet with one call, saves it as a candidate, and shows old next to new", async () => {
     await openEdit();
     expect(screen.getByText("est. $0.018")).toBeTruthy();
     expect(editBodies).toHaveLength(1);
@@ -140,31 +143,31 @@ describe("Audition supplied sheet", () => {
     expect(editBodies[0].image).toMatch(/^data:image\/png;base64,/);
     expect(screen.getByRole("img", { name: "Current sheet" }).getAttribute("src")).toBe(SHEET);
     fireEvent.click(screen.getByRole("img", { name: "Edited sheet" }));
-    expect(within(screen.getByRole("dialog")).getByRole("link", { name: "Download" }).getAttribute("href")).toBe("data:image/png;base64,NEW");
-    expect(patches).toEqual([]);
+    expect(within(screen.getByRole("dialog")).getByRole("link", { name: "Download" }).getAttribute("href")).toBe(CAND);
+    expect(patches).toEqual([{ addCandidate: "data:image/png;base64,NEW" }]);
   });
 
-  it("Discard saves nothing", async () => {
+  it("Discard deletes the saved candidate", async () => {
     await openEdit();
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(patches[1]).toEqual({ deleteCandidate: "candidate-abc.png" }));
     expect(screen.queryByRole("img", { name: "Edited sheet" })).toBeNull();
-    expect(patches).toEqual([]);
   });
 
-  it("Replace main patches the sheet", async () => {
+  it("Replace main promotes the saved candidate", async () => {
     await openEdit();
-    patchResponse = { id: "m1", name: "Ana", photo: "", shots: {}, stageColor: null, sheet: "/api/cast/m1/file/sheet.jpg?project=p1", closeup: "", candidates: [SHEET] };
+    patchResponse = { ...SAVED, sheet: CAND, candidates: [SHEET] };
     fireEvent.click(screen.getByRole("button", { name: "Replace main" }));
-    await waitFor(() => expect(patches).toEqual([{ sheet: "data:image/png;base64,NEW" }]));
-    expect((await screen.findByRole("img", { name: "Ana sheet" })).getAttribute("src")).toBe("/api/cast/m1/file/sheet.jpg?project=p1");
+    await waitFor(() => expect(patches[1]).toEqual({ promoteCandidate: "candidate-abc.png" }));
+    expect((await screen.findByRole("img", { name: "Ana sheet" })).getAttribute("src")).toBe(CAND);
   });
 
-  it("Keep as candidate patches a new candidate", async () => {
+  it("Keep as candidate just closes the panel; the edit is already saved", async () => {
     await openEdit();
-    patchResponse = { id: "m1", name: "Ana", photo: "", shots: {}, stageColor: null, sheet: SHEET, closeup: "", candidates: [CAND] };
     fireEvent.click(screen.getByRole("button", { name: "Keep as candidate" }));
-    await waitFor(() => expect(patches).toEqual([{ addCandidate: "data:image/png;base64,NEW" }]));
-    expect(await screen.findByRole("img", { name: "Ana candidate 1" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Edited sheet" })).toBeNull();
+    expect(patches).toEqual([{ addCandidate: "data:image/png;base64,NEW" }]);
+    expect(screen.getByRole("img", { name: "Ana candidate 1" })).toBeTruthy();
   });
 
   it("makes a candidate main or deletes it", async () => {
