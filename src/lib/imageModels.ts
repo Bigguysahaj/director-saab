@@ -11,6 +11,15 @@ import type { ImageModel } from "./types";
 // specify a model, and as the picker's default selection.
 export const DEFAULT_IMAGE_MODEL_ID = "google/gemini-3.1-flash-lite-image";
 
+// shortcut: hand-kept per-image prices (OpenRouter prices images per token), update when a model's price changes.
+export const IMAGE_PRICE_PER_CALL: Record<string, number> = {
+  [DEFAULT_IMAGE_MODEL_ID]: 0.034,
+  "bytedance-seed/seedream-5-0-flash": 0.018,
+  "bytedance-seed/seedream-5-0-lite": 0.035,
+  "bytedance-seed/seedream-4.5": 0.04,
+  "bytedance-seed/seedream-5-0-pro": 0.045,
+};
+
 /** Tolerates the live catalog's exact field shape drifting slightly. */
 export function normalizeImageModel(raw: Record<string, unknown>): ImageModel {
   const id = String(raw.id ?? "");

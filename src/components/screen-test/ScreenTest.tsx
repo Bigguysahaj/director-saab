@@ -5,6 +5,7 @@ import { blobToDataUrl, loadCast, urlToDataUrl, type CastMember } from "@/lib/ca
 import { colorLabel } from "@/lib/stageColors";
 import type { ScreenTestCastRef } from "@/lib/screenTest";
 import type { ImageModel } from "@/lib/types";
+import { ImageModelSelect } from "@/components/ImageModelSelect";
 
 type ScreenTestResult = { image: string; cost: number; createdAt: number };
 
@@ -137,7 +138,6 @@ function ScreenTestSection({
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const canGenerate = !!stagePhoto && assignedCast.length > 0 && !busy;
-  const selectedDop = dopModels.find((m) => m.id === dopModel);
 
   return (
     <div>
@@ -194,24 +194,7 @@ function ScreenTestSection({
           )}
         </div>
 
-        <div className="flex min-w-56 flex-col gap-2">
-          <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">DoP — Director of Photography</span>
-          <select
-            value={dopModel}
-            onChange={(e) => onDopModel(e.target.value)}
-            disabled={dopModels.length === 0}
-            className="rounded-full border border-border bg-transparent px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] text-fg outline-none disabled:opacity-40"
-          >
-            {dopModels.map((m) => (
-              <option key={m.id} value={m.id} className="bg-bg-panel normal-case tracking-normal">
-                {m.provider} — {m.label}
-              </option>
-            ))}
-          </select>
-          {selectedDop?.tagline && (
-            <p className="text-[9px] uppercase tracking-[0.1em] text-fg-faint">{selectedDop.tagline}</p>
-          )}
-        </div>
+        <ImageModelSelect label="DoP — Director of Photography" models={dopModels} value={dopModel} onChange={onDopModel} />
 
         <button
           onClick={onGenerate}

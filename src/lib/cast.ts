@@ -1,4 +1,4 @@
-export type CastMemberShot = { image: string; cost: number };
+export type CastMemberShot = { image: string; cost: number; model?: string };
 
 export type CastMember = {
   id: string;
