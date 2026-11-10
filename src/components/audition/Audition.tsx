@@ -137,7 +137,7 @@ export function Audition() {
 
   async function patchMember(
     id: string,
-    patch: { name?: string; photo?: string; shots?: Record<string, CastMemberShot> }
+    patch: Parameters<typeof updateMember>[1]
   ) {
     const updated = await updateMember(id, patch, projectId ?? undefined);
     setCast((prev) => prev.map((c) => (c.id === id ? updated : c)));
@@ -252,6 +252,10 @@ export function Audition() {
             key={member.id}
             member={member}
             estimate={IMAGE_PRICE_PER_CALL[sheetModel]}
+            models={sheetModels}
+            model={sheetModel}
+            onModel={pickSheetModel}
+            onPatch={(patch) => patchMember(member.id, patch)}
             generating={generatingId === member.id}
             onRename={(name) => patchMember(member.id, { name })}
             onPhoto={(file) => handlePhoto(member.id, file)}
@@ -270,6 +274,10 @@ export function Audition() {
 function CastCard({
   member,
   estimate,
+  models,
+  model,
+  onModel,
+  onPatch,
   generating,
   onRename,
   onPhoto,
@@ -281,6 +289,10 @@ function CastCard({
 }: {
   member: CastMember;
   estimate: number | undefined;
+  models: ImageModel[];
+  model: string;
+  onModel: (id: string) => void;
+  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<void>;
   generating: boolean;
   onRename: (name: string) => void;
   onPhoto: (file: File | null) => void;
@@ -295,15 +307,17 @@ function CastCard({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const spent = Object.values(member.shots).reduce((sum, s) => sum + s.cost, 0);
   const hasShots = Object.keys(member.shots).length > 0;
+  // A supplied sheet is the member's reference, so the card works with it instead of asking to generate.
+  const hasSheet = !!member.sheet;
 
   return (
     <div className="rounded-2xl border border-border bg-bg-panel p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          {member.photo || member.sheet ? (
-            <button type="button" onClick={() => setViewing({ src: member.photo || member.sheet, label: member.name })} className="shrink-0 cursor-zoom-in">
+          {hasSheet ? null : member.photo ? (
+            <button type="button" onClick={() => setViewing({ src: member.photo, label: member.name })} className="shrink-0 cursor-zoom-in">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={member.photo || member.sheet} alt={member.name} className="h-20 w-20 rounded-xl object-cover" />
+              <img src={member.photo} alt={member.name} className="h-20 w-20 rounded-xl object-cover" />
             </button>
           ) : (
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-border text-center text-[9px] uppercase tracking-[0.15em] text-fg-faint">
@@ -324,21 +338,25 @@ function CastCard({
               className="hidden"
               onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
             />
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={transferBusy}
-              className="w-fit rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-            >
-              {member.photo ? "Change photo" : "Upload photo"}
-            </button>
+            {!hasSheet && (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={transferBusy}
+                className="w-fit rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
+              >
+                {member.photo ? "Change photo" : "Upload photo"}
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col items-end gap-2">
           <CastColorMark color={member.stageColor} />
-          <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
-            {estimate === undefined ? "est. unknown" : `est. $${estimate.toFixed(3)}`}
-          </span>
+          {!hasSheet && (
+            <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
+              {formatEstimate(estimate)}
+            </span>
+          )}
           <button
             onClick={onDelete}
             disabled={transferBusy}
@@ -361,7 +379,10 @@ function CastCard({
           <button type="button" disabled={!targetId || transferBusy} onClick={() => void onTransfer(targetId, "move")} className="rounded-full border border-border px-3 py-2 disabled:opacity-40">Move to project</button>
         </div>
       )}
-      {member.photo && (
+      {hasSheet && (
+        <SheetPanel member={member} models={models} model={model} onModel={onModel} onPatch={onPatch} onView={setViewing} busy={transferBusy} />
+      )}
+      {member.photo && !hasSheet && (
         <button
           onClick={onGenerate}
           disabled={generating || transferBusy}
@@ -399,6 +420,152 @@ function CastCard({
         </>
       )}
       {viewing && <ImageViewer {...viewing} onClose={() => setViewing(null)} />}
+    </div>
+  );
+}
+
+function formatEstimate(estimate: number | undefined) {
+  return estimate === undefined ? "est. unknown" : `est. $${estimate.toFixed(3)}`;
+}
+
+const candidateFilename = (url: string) => decodeURIComponent(new URL(url, "http://x").pathname.split("/").pop() ?? "");
+
+const smallButton = "rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg disabled:opacity-40";
+
+/** Main sheet + close-up + candidates, and the edit flow (one paid call, then Discard / Replace main / Keep as candidate). */
+function SheetPanel({
+  member,
+  models,
+  model,
+  onModel,
+  onPatch,
+  onView,
+  busy,
+}: {
+  member: CastMember;
+  models: ImageModel[];
+  model: string;
+  onModel: (id: string) => void;
+  onPatch: (patch: Parameters<typeof updateMember>[1]) => Promise<void>;
+  onView: (v: { src: string; label: string }) => void;
+  busy: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const candidates = member.candidates ?? [];
+  const disabled = busy || running;
+
+  async function runEdit() {
+    setRunning(true);
+    setError(null);
+    try {
+      const image = await urlToDataUrl(member.sheet);
+      const res = await fetch("/api/image-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image, prompt, model }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Edit failed");
+      setResult(data.image);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Edit failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function save(patch: Parameters<typeof updateMember>[1]) {
+    setRunning(true);
+    setError(null);
+    try {
+      await onPatch(patch);
+      setResult(null);
+      setEditing(false);
+      setPrompt("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const thumb = (src: string, label: string, className = "h-40") => (
+    <button type="button" onClick={() => onView({ src, label })} className="cursor-zoom-in">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={label} className={`${className} rounded-xl border border-border object-contain`} />
+    </button>
+  );
+
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <div className="flex flex-wrap items-start gap-3">
+        {thumb(member.sheet, `${member.name} sheet`)}
+        {member.closeup && thumb(member.closeup, `${member.name} close-up`)}
+      </div>
+
+      {candidates.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">Candidates</span>
+          <div className="flex flex-wrap gap-3">
+            {candidates.map((url, i) => (
+              <div key={url} className="flex flex-col items-center gap-1">
+                {thumb(url, `${member.name} candidate ${i + 1}`, "h-20")}
+                <div className="flex gap-1">
+                  <button type="button" disabled={disabled} onClick={() => void save({ promoteCandidate: candidateFilename(url) })} className={smallButton}>Make main</button>
+                  <button type="button" aria-label="Delete candidate" disabled={disabled} onClick={() => void save({ deleteCandidate: candidateFilename(url) })} className={smallButton}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!editing ? (
+        <button type="button" disabled={busy} onClick={() => setEditing(true)} className={`w-fit ${smallButton}`}>Edit sheet</button>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
+          <textarea
+            aria-label="Edit prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="What should change? e.g. make the jacket red"
+            rows={2}
+            className="rounded-lg border border-border bg-bg p-2 text-sm text-fg outline-none"
+          />
+          <div className="flex flex-wrap items-end gap-3">
+            <ImageModelSelect label="Edit model" models={models} value={model} onChange={onModel} disabled={disabled} />
+            <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">{formatEstimate(IMAGE_PRICE_PER_CALL[model])}</span>
+            <button type="button" disabled={disabled || !prompt.trim()} onClick={() => void runEdit()} className="rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40">
+              {running && !result ? "Editing…" : "Run edit"}
+            </button>
+            <button type="button" disabled={running} onClick={() => { setEditing(false); setResult(null); }} className={smallButton}>Cancel</button>
+          </div>
+          {error && <p role="alert" className="text-sm text-warn">{error}</p>}
+          {result && (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-3">
+                <figure className="flex flex-col gap-1">
+                  {thumb(member.sheet, "Current sheet")}
+                  <figcaption className="text-[9px] uppercase tracking-[0.15em] text-fg-faint">Current</figcaption>
+                </figure>
+                <figure className="flex flex-col gap-1">
+                  {thumb(result, "Edited sheet")}
+                  <figcaption className="text-[9px] uppercase tracking-[0.15em] text-fg-faint">Edited</figcaption>
+                </figure>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={disabled} onClick={() => setResult(null)} className={smallButton}>Discard</button>
+                <button type="button" disabled={disabled} onClick={() => void save({ sheet: result })} className={smallButton}>Replace main</button>
+                <button type="button" disabled={disabled} onClick={() => void save({ addCandidate: result })} className={smallButton}>Keep as candidate</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

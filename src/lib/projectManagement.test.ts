@@ -74,6 +74,14 @@ it.each(['copy', 'move'] as const)('%s transfers all images and metadata without
     expect(await cast.readRoster(target.id)).toHaveLength(2);
   }
 });
+it.each(['copy', 'move'] as const)('%s transfers candidate sheets', async mode => {
+  const { source, target, member } = await fixture();
+  const withCandidate = await cast.updateMember(source.id, member.id, { addCandidateDataUrl: 'data:image/png;base64,Y2FuZA==' });
+  const transferred = await cast.transferMember(source.id, member.id, target.id, mode);
+  expect(transferred.candidates).toEqual(withCandidate.candidates);
+  expect((await cast.readMemberFile(target.id, transferred.id, transferred.candidates![0])).toString()).toBe('cand');
+  expect(await cast.readRoster(source.id)).toHaveLength(mode === 'copy' ? 1 : 0);
+});
 it('rejects invalid transfers without changing the source', async () => {
   const { source, target, member } = await fixture();
   await expect(cast.transferMember(source.id, member.id, source.id, 'move')).rejects.toThrow(/different/i);

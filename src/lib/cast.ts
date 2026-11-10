@@ -8,6 +8,7 @@ export type CastMember = {
   stageColor: string | null; // hex of the mannequin this member is currently assigned to on /stage, if any (see CastPanel.tsx)
   sheet: string; // ready-made character sheet URL, "" if none
   closeup: string; // optional close-up detail sheet URL, "" if none
+  candidates: string[]; // alternate sheet URLs kept from edits
 };
 
 /**
@@ -64,6 +65,9 @@ export async function updateMember(
     stageColor?: string | null;
     sheet?: string; // data URL
     closeup?: string; // data URL
+    addCandidate?: string; // data URL
+    promoteCandidate?: string; // candidate filename
+    deleteCandidate?: string; // candidate filename
   },
   projectId?: string,
 ): Promise<CastMember> {

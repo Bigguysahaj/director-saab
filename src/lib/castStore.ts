@@ -25,6 +25,7 @@ export type StoredCastMember = {
   // Ready-made sheets added whole (no cropping) and sent as take references.
   sheet?: string | null;
   closeup?: string | null;
+  candidates?: string[]; // alternate sheets kept from edits; filenames within the member's folder
 };
 
 function castDir(projectId: string): string {
@@ -112,6 +113,9 @@ export async function updateMember(
     stageColor?: string | null;
     sheetDataUrl?: string;
     closeupDataUrl?: string;
+    addCandidateDataUrl?: string;
+    promoteCandidate?: string;
+    deleteCandidate?: string;
   }
 ): Promise<StoredCastMember> {
   const roster = await readRoster(projectId);
@@ -151,13 +155,43 @@ export async function updateMember(
 
   if (patch.stageColor !== undefined) member.stageColor = patch.stageColor;
 
+  const dir = memberDir(projectId, id);
+  let candidates = [...(member.candidates ?? [])];
+  const findCandidate = (filename: string) => {
+    if (!candidates.includes(safeSegment("filename", filename))) throw new Error(`Candidate ${filename} not found`);
+    return filename;
+  };
+
+  if (patch.sheetDataUrl !== undefined && member.sheet) {
+    // Replacing the main sheet keeps the old one as a candidate. Copy, not rename, so a failed save below leaves the roster's sheet intact.
+    const kept = `candidate-${randomUUID()}${path.extname(member.sheet)}`;
+    await copyFile(path.join(dir, member.sheet), path.join(dir, kept));
+    candidates.push(kept);
+  }
+
   for (const key of ["sheet", "closeup"] as const) {
     const dataUrl = patch[`${key}DataUrl`];
     if (dataUrl === undefined) continue;
     const old = member[key];
     member[key] = await saveMemberImage(projectId, id, key, dataUrl);
-    if (old && old !== member[key]) await rm(path.join(memberDir(projectId, id), old), { force: true });
+    if (old && old !== member[key]) await rm(path.join(dir, old), { force: true });
   }
+
+  if (patch.addCandidateDataUrl !== undefined) {
+    candidates.push(await saveMemberImage(projectId, id, `candidate-${randomUUID()}`, patch.addCandidateDataUrl));
+  }
+  if (patch.promoteCandidate !== undefined) {
+    const promoted = findCandidate(patch.promoteCandidate);
+    candidates = candidates.filter((f) => f !== promoted);
+    if (member.sheet) candidates.push(member.sheet);
+    member.sheet = promoted;
+  }
+  if (patch.deleteCandidate !== undefined) {
+    const deleted = findCandidate(patch.deleteCandidate);
+    candidates = candidates.filter((f) => f !== deleted);
+    await rm(path.join(dir, deleted), { force: true });
+  }
+  member.candidates = candidates;
 
   roster[idx] = member;
   await writeRoster(projectId, roster);
@@ -191,6 +225,7 @@ export function toClientMember(projectId: string, m: StoredCastMember) {
     stageColor: m.stageColor ?? null,
     sheet: m.sheet ? file(m.sheet) : "",
     closeup: m.closeup ? file(m.closeup) : "",
+    candidates: (m.candidates ?? []).map(file),
   };
 }
 
@@ -212,7 +247,7 @@ export async function transferMember(
   const target = await readRoster(targetProjectId);
   const transferred = { ...member, id: `cast-${randomUUID()}`, stageColor: null };
   const dir = memberDir(targetProjectId, transferred.id);
-  const files = new Set([member.photo, member.sheet, member.closeup, ...Object.values(member.shots).map((s) => s.file)].filter((f): f is string => !!f));
+  const files = new Set([member.photo, member.sheet, member.closeup, ...(member.candidates ?? []), ...Object.values(member.shots).map((s) => s.file)].filter((f): f is string => !!f));
   await mkdir(dir, { recursive: true });
   try {
     for (const filename of files) {
