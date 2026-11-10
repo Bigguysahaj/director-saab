@@ -11,7 +11,7 @@ export async function PATCH(
     const body = (await req.json()) as {
       name?: string;
       photo?: string; // data URL
-      shots?: Record<string, { image: string; cost: number }>;
+      shots?: Record<string, { image: string; cost: number; model?: string }>;
       stageColor?: string | null;
       sheet?: string; // data URL
       closeup?: string; // data URL
