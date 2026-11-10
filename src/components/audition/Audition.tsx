@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHARACTER_SHEET_COST, CHARACTER_SHEET_MODEL, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
+import { CHARACTER_SHEET_MODEL, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
 import {
   blobToDataUrl,
   createMember,
@@ -17,6 +17,7 @@ import { loadProjects, type Project } from "@/lib/projects";
 import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
 import { ImageModelSelect } from "@/components/ImageModelSelect";
 import type { ImageModel } from "@/lib/types";
+import { IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 import { CastColorMark } from "./CastColorMark";
 
 const SHEET_MODEL_KEY = "director:cast-sheet-model";
@@ -250,6 +251,7 @@ export function Audition() {
           <CastCard
             key={member.id}
             member={member}
+            estimate={IMAGE_PRICE_PER_CALL[sheetModel]}
             generating={generatingId === member.id}
             onRename={(name) => patchMember(member.id, { name })}
             onPhoto={(file) => handlePhoto(member.id, file)}
@@ -267,6 +269,7 @@ export function Audition() {
 
 function CastCard({
   member,
+  estimate,
   generating,
   onRename,
   onPhoto,
@@ -277,6 +280,7 @@ function CastCard({
   onTransfer,
 }: {
   member: CastMember;
+  estimate: number | undefined;
   generating: boolean;
   onRename: (name: string) => void;
   onPhoto: (file: File | null) => void;
@@ -287,6 +291,7 @@ function CastCard({
   onTransfer: (targetId: string, mode: "copy" | "move") => Promise<void>;
 }) {
   const [targetId, setTargetId] = useState("");
+  const [viewing, setViewing] = useState<{ src: string; label: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const spent = Object.values(member.shots).reduce((sum, s) => sum + s.cost, 0);
   const hasShots = Object.keys(member.shots).length > 0;
@@ -296,8 +301,10 @@ function CastCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           {member.photo || member.sheet ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={member.photo || member.sheet} alt={member.name} className="h-20 w-20 rounded-xl object-cover" />
+            <button type="button" onClick={() => setViewing({ src: member.photo || member.sheet, label: member.name })} className="shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={member.photo || member.sheet} alt={member.name} className="h-20 w-20 rounded-xl object-cover" />
+            </button>
           ) : (
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-dashed border-border text-center text-[9px] uppercase tracking-[0.15em] text-fg-faint">
               no photo
@@ -330,7 +337,7 @@ function CastCard({
         <div className="flex flex-col items-end gap-2">
           <CastColorMark color={member.stageColor} />
           <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
-            est. ${CHARACTER_SHEET_COST.toFixed(2)}
+            {estimate === undefined ? "est. unknown" : `est. $${estimate.toFixed(3)}`}
           </span>
           <button
             onClick={onDelete}
@@ -373,8 +380,10 @@ function CastCard({
                 <div key={shot.id} className="flex flex-col items-center gap-1">
                   <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-bg">
                     {result ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={result.image} alt={shot.label} className="h-full w-full object-cover" />
+                      <button type="button" onClick={() => setViewing({ src: result.image, label: shot.label })} className="h-full w-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={result.image} alt={shot.label} className="h-full w-full object-cover" />
+                      </button>
                     ) : (
                       <span className="text-[9px] text-fg-faint">—</span>
                     )}
@@ -389,6 +398,25 @@ function CastCard({
           </p>
         </>
       )}
+      {viewing && <ImageViewer {...viewing} onClose={() => setViewing(null)} />}
+    </div>
+  );
+}
+
+function ImageViewer({ src, label, onClose }: { src: string; label: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label={label} onClick={onClose} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={label} onClick={(e) => e.stopPropagation()} className="max-h-[80vh] max-w-full rounded-xl object-contain" />
+      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <a href={src} download={label.replace(/[^\w-]+/g, "-")} className="rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent hover:bg-accent hover:text-bg">Download</a>
+        <button type="button" onClick={onClose} className="rounded-full border border-border px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-fg-dim hover:text-fg">Close</button>
+      </div>
     </div>
   );
 }

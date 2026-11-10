@@ -62,4 +62,22 @@ describe("Audition image model", () => {
     await waitFor(() => expect(sheetBodies).toHaveLength(1));
     expect(sheetBodies[0].model).toBe(GEMINI);
   });
+
+  it("shows the picked model's price as the estimate", async () => {
+    setup();
+    await picker();
+    expect(screen.getByText("est. $0.034")).toBeTruthy();
+    fireEvent.change(await picker(), { target: { value: FLASH } });
+    expect(screen.getByText("est. $0.018")).toBeTruthy();
+  });
+
+  it("opens a shot in a popup with a download link", async () => {
+    setup({ "angle-front": { image: "/front.png", cost: 0.004 } });
+    fireEvent.click(await screen.findByRole("img", { name: "Front" }));
+    const dialog = screen.getByRole("dialog", { name: "Front" });
+    const link = dialog.querySelector("a[download]") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/front.png");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });
