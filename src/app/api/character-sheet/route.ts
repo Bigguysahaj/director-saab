@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { generateImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
 import {
   CHARACTER_SHEET_COST_PER_IMAGE,
   CHARACTER_SHEET_MODEL,
@@ -12,13 +13,6 @@ import {
  * shot. The client crops the grid into individual shots.
  */
 export async function POST(req: Request) {
-  if (!isConfigured()) {
-    return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not configured on the server." },
-      { status: 501 }
-    );
-  }
-
   const body = (await req.json()) as { photo?: string; model?: unknown };
   if (!body.photo) {
     return NextResponse.json(
@@ -30,9 +24,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "model must be a non-empty string" }, { status: 400 });
   }
   const model = (body.model as string | undefined) ?? CHARACTER_SHEET_MODEL;
+  const ark = model.startsWith("modelark/");
+  if (ark ? !isArkConfigured() : !isConfigured()) {
+    return NextResponse.json(
+      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
+      { status: 501 }
+    );
+  }
 
   try {
-    const result = await generateImage({
+    const result = await (ark ? generateArkImage : generateOpenRouterImage)({
       model,
       prompt: buildCharacterSheetGridPrompt(),
       input_references: [{ type: "image_url", image_url: { url: body.photo } }],
