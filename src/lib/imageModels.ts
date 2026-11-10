@@ -62,3 +62,34 @@ export const FALLBACK_IMAGE_MODELS: ImageModel[] = [
     maxInputReferences: 8,
   },
 ];
+
+export const ARK_IMAGE_MODELS: ImageModel[] = [
+  {
+    id: "modelark/dola-seedream-5-0-flash-260915",
+    label: "Seedream 5.0 Flash",
+    provider: "ModelArk",
+    tagline: "Fast Seedream image generation.",
+    maxInputReferences: 10,
+  },
+  {
+    id: "modelark/seedream-5-0-lite-260128",
+    label: "Seedream 5.0 Lite",
+    provider: "ModelArk",
+    tagline: "Lightweight Seedream image generation.",
+    maxInputReferences: 14,
+  },
+  {
+    id: "modelark/seedream-4-5-251128",
+    label: "Seedream 4.5",
+    provider: "ModelArk",
+    tagline: "Multi-reference image generation.",
+    maxInputReferences: 14,
+  },
+  {
+    id: "modelark/dola-seedream-5-0-pro-260628",
+    label: "Seedream 5.0 Pro",
+    provider: "ModelArk",
+    tagline: "Higher-fidelity Seedream image generation.",
+    maxInputReferences: 10,
+  },
+];
