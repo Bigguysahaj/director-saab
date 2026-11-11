@@ -7,6 +7,7 @@ import { IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 import type { ImageModel } from "@/lib/types";
 import { ImageModelSelect } from "@/components/ImageModelSelect";
 import { ImageViewer } from "@/components/ImageViewer";
+import { CastImageTicks, castImageOptions, defaultCastImages } from "@/components/CastImageTicks";
 
 type ScreenTestEntry = {
   id: string;
@@ -17,13 +18,6 @@ type ScreenTestEntry = {
   model: string;
   inputs: { kind: "edit" | "cast" | "stage"; cast: string[]; image: boolean };
 };
-
-/** Main sheet (+ close-up); without a sheet, the front-angle shot or the photo. */
-function memberImages(c: CastMember): string[] {
-  if (c.sheet) return [c.sheet, c.closeup].filter(Boolean);
-  const fallback = c.shots["angle-front"]?.image ?? c.photo;
-  return fallback ? [fallback] : [];
-}
 
 const pill = "rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors disabled:opacity-40";
 
@@ -38,6 +32,7 @@ export function ScreenTest() {
   const [image, setImage] = useState<string | null>(null);
   const [isStage, setIsStage] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
+  const [ticks, setTicks] = useState<Record<string, string[]>>({});
   const [prompt, setPrompt] = useState("");
   const [models, setModels] = useState<ImageModel[]>([]);
   const [model, setModel] = useState("");
@@ -75,10 +70,13 @@ export function ScreenTest() {
 
   const stageMode = isStage && !!image;
   const chosen = stageMode ? cast.filter((c) => c.stageColor) : cast.filter((c) => picked.includes(c.id));
-  const imageCount = (image ? 1 : 0) + chosen.reduce((n, c) => n + memberImages(c).length, 0);
+  const memberImages = (c: CastMember) => ticks[c.id] ?? defaultCastImages(c);
+  // A member with nothing ticked is left out of the run.
+  const sending = chosen.filter((c) => memberImages(c).length > 0);
+  const imageCount = (image ? 1 : 0) + sending.reduce((n, c) => n + memberImages(c).length, 0);
   const cap = models.find((m) => m.id === model)?.maxInputReferences;
   const overCap = cap !== undefined && imageCount > cap;
-  const ready = stageMode ? chosen.length > 0 : !!prompt.trim() && (!!image || chosen.length > 0);
+  const ready = stageMode ? sending.length > 0 : !!prompt.trim() && (!!image || sending.length > 0);
   const estimate = IMAGE_PRICE_PER_CALL[model];
 
   async function takeFile(file: File | null | undefined) {
@@ -95,7 +93,7 @@ export function ScreenTest() {
     setError(null);
     try {
       const castRefs = await Promise.all(
-        chosen.map(async (c) => ({
+        sending.map(async (c) => ({
           name: c.name,
           ...(stageMode ? { colorLabel: colorLabel(c.stageColor as string) } : {}),
           images: await Promise.all(memberImages(c).map(urlToDataUrl)),
@@ -174,7 +172,7 @@ export function ScreenTest() {
                   key={c.id}
                   type="button"
                   aria-pressed={on}
-                  disabled={stageMode || memberImages(c).length === 0}
+                  disabled={stageMode || castImageOptions(c).length === 0}
                   onClick={() => toggle(c.id)}
                   className={`flex items-center gap-2 ${pill} ${on ? "border-accent text-accent" : "border-border text-fg-dim hover:text-fg"}`}
                 >
@@ -184,6 +182,12 @@ export function ScreenTest() {
               );
             })}
           </div>
+          {chosen.map((c) => (
+            <div key={c.id} className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">{c.name}</span>
+              <CastImageTicks member={c} onChange={(urls) => setTicks((prev) => ({ ...prev, [c.id]: urls }))} />
+            </div>
+          ))}
           {stageMode && chosen.length === 0 && (
             <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">Assign cast to mannequins on /stage first.</p>
           )}

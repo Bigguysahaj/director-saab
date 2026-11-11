@@ -14,9 +14,9 @@ function setup() {
     const url = String(input);
     const json = (b: unknown) => new Response(JSON.stringify(b));
     if (url === "/api/cast") return json([
-      member({ id: "a", name: "Ana", sheet: "/ana-sheet.png", closeup: "/ana-closeup.png" }),
+      member({ id: "a", name: "Ana", sheet: "/ana-sheet.png", closeup: "/ana-closeup.png", candidates: ["/ana-c1.png"] }),
       member({ id: "b", name: "Ben", photo: "/ben.png" }),
-      member({ id: "c", name: "Cy", sheet: "/cy-sheet.png", stageColor: "#c65d3b" }),
+      member({ id: "c", name: "Cy", sheet: "/cy-sheet.png", stageColor: "#c65d3b", candidates: ["/cy-c1.png"] }),
     ]);
     if (url === "/api/screen-test" && init?.method === "POST") {
       const body = JSON.parse(String(init.body));
@@ -135,3 +135,63 @@ describe("ScreenTest", () => {
     expect(cast[0].images).toHaveLength(1);
   });
 });
+
+describe("ScreenTest cast image ticks", () => {
+  const tick = (name: string) => fireEvent.click(screen.getByRole("checkbox", { name }));
+
+  it("sends what a picked member has ticked", async () => {
+    setup();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Ana" }));
+    expect((screen.getByRole("checkbox", { name: "Send Ana candidate 1" }) as HTMLInputElement).checked).toBe(false);
+    tick("Send Ana candidate 1");
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "x" } });
+    fireEvent.click(generate());
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect((posts[0].cast as { images: string[] }[])[0].images).toHaveLength(3);
+    expect(fetched.filter((u) => u.startsWith("/ana"))).toEqual(["/ana-sheet.png", "/ana-closeup.png", "/ana-c1.png"]);
+  });
+
+  it("counts ticked images against the model's cap", async () => {
+    setup();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Ana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ben" }));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "x" } });
+    fireEvent.change(screen.getByLabelText("DoP — Director of Photography"), { target: { value: "tiny/model" } });
+    expect(generate().disabled).toBe(true);
+    tick("Send Ana close-up");
+    expect(generate().disabled).toBe(false);
+    tick("Send Ana candidate 1");
+    expect(generate().disabled).toBe(true);
+    expect(posts).toEqual([]);
+  });
+
+  it("gives locked stage members the strip too", async () => {
+    setup();
+    await ready();
+    drop();
+    await screen.findByRole("img", { name: "Dropped image" });
+    fireEvent.click(screen.getByLabelText("This is a /stage photo"));
+    tick("Send Cy candidate 1");
+    fireEvent.click(generate());
+    await waitFor(() => expect(posts).toHaveLength(1));
+    const cast = posts[0].cast as { name: string; colorLabel: string; images: string[] }[];
+    expect(cast[0]).toMatchObject({ name: "Cy", colorLabel: "burnt orange" });
+    expect(cast[0].images).toHaveLength(2);
+  });
+
+  it("leaves out a picked member with nothing ticked", async () => {
+    setup();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Ana" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ben" }));
+    tick("Send Ana sheet");
+    tick("Send Ana close-up");
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "x" } });
+    fireEvent.click(generate());
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect((posts[0].cast as { name: string }[]).map((c) => c.name)).toEqual(["Ben"]);
+  });
+});
+

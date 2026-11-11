@@ -20,12 +20,17 @@ const model: VideoModel = {
 
 afterEach(cleanup);
 
-function setup(onSubmit = vi.fn()) {
+let fetched: string[] = [];
+const CONTENTS: Record<string, string> = { "/sheet.png": "S", "/closeup.png": "C", "/cand1.png": "K" };
+
+function setup(onSubmit = vi.fn(), candidates: string[] = ["/cand1.png"]) {
+  fetched = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
     if (url === "/api/cast") return new Response(JSON.stringify([
-      { id: "m1", name: "Ana", sheet: "/sheet.png", closeup: "/closeup.png" },
+      { id: "m1", name: "Ana", sheet: "/sheet.png", closeup: "/closeup.png", candidates },
     ]));
-    return { ok: true, blob: async () => new Blob([url === "/sheet.png" ? "S" : "C"], { type: "image/png" }) } as Response;
+    fetched.push(String(url));
+    return { ok: true, blob: async () => new Blob([CONTENTS[String(url)] ?? "X"], { type: "image/png" }) } as Response;
   });
   render(<SendTake models={[model]} onSubmit={onSubmit} />);
   return screen.getByLabelText("Reference images");
@@ -182,3 +187,56 @@ describe("SendTake reference images", () => {
     expect(screen.getAllByRole("img")).toHaveLength(3);
   });
 });
+
+describe("SendTake cast image ticks", () => {
+  it("attaches a ticked candidate after the sheets, with uploads after it", async () => {
+    const onSubmit = vi.fn();
+    const input = setup(onSubmit);
+    await chooseCast();
+    expect(fetched).not.toContain("/cand1.png");
+    pick(input, "a.png", "A");
+    await screen.findByRole("img", { name: "@Image3" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Send Ana candidate 1" }));
+    expect((await screen.findByRole("img", { name: "@Image4" })).getAttribute("src")).toBe("data:image/png;base64,QQ==");
+    expect(screen.getByRole("img", { name: "@Image3" }).getAttribute("src")).toBe("data:image/png;base64,Sw==");
+    expect(fetched).toContain("/cand1.png");
+    await submitTake();
+    expect(onSubmit.mock.calls[0][0].input_references).toEqual([
+      videoReference, imageReference("Uw=="), imageReference("Qw=="), imageReference("Sw=="), imageReference("QQ=="),
+    ]);
+  });
+
+  it("sends only what is ticked, down to no cast images", async () => {
+    const onSubmit = vi.fn();
+    setup(onSubmit);
+    await chooseCast();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Send Ana sheet" }));
+    await waitFor(() => expect(screen.queryByRole("img", { name: "@Image2" })).toBeNull());
+    expect(screen.getByRole("img", { name: "@Image1" }).getAttribute("src")).toBe("data:image/png;base64,Qw==");
+    expect((screen.getByRole("checkbox", { name: "Send Ana close-up" }) as HTMLInputElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Send Ana close-up" }));
+    await waitFor(() => expect(screen.queryByRole("img", { name: "@Image1" })).toBeNull());
+    await submitTake();
+    expect(onSubmit.mock.calls[0][0].input_references).toEqual([videoReference]);
+  });
+
+  it("catches going over the 9-image limit on Preview", async () => {
+    const onSubmit = vi.fn();
+    const candidates = Array.from({ length: 8 }, (_, i) => `/c${i}.png`);
+    setup(onSubmit, candidates);
+    await chooseCast();
+    for (let i = 1; i <= 8; i++) fireEvent.click(screen.getByRole("checkbox", { name: `Send Ana candidate ${i}` }));
+    await screen.findByRole("img", { name: "@Image10" });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:take");
+    vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(5);
+    vi.spyOn(HTMLMediaElement.prototype, "src", "set").mockImplementation(function (this: HTMLMediaElement) {
+      queueMicrotask(() => fireEvent.loadedMetadata(this));
+    });
+    fireEvent.change(screen.getByLabelText("Take video"), { target: { files: [new File(["V"], "take.mp4", { type: "video/mp4" })] } });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect((await screen.findByText(/At most 9 reference images \(got 10\)/))).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
