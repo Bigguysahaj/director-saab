@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { generateImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
 import { SCREEN_TEST_COST_PER_IMAGE, buildScreenTestPrompt, type ScreenTestCastRef } from "@/lib/screenTest";
 import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
 import { readLatestScreenTest, saveScreenTest, toClientScreenTest } from "@/lib/screenTestStore";
@@ -18,18 +19,19 @@ export async function GET() {
  * ends up on a cast member in the first place.
  */
 export async function POST(req: Request) {
-  if (!isConfigured()) {
-    return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not configured on the server." },
-      { status: 501 }
-    );
-  }
-
   const body = (await req.json()) as {
     stagePhoto?: string; // data URL
     cast?: (ScreenTestCastRef & { photo: string })[]; // photo: data URL
-    model?: string; // OpenRouter image-model id — see the DoP picker in ScreenTest.tsx
+    model?: string; // Image-model id — see the DoP picker in ScreenTest.tsx
   };
+  const model = body.model || DEFAULT_IMAGE_MODEL_ID;
+  const ark = model.startsWith("modelark/");
+  if (ark ? !isArkConfigured() : !isConfigured()) {
+    return NextResponse.json(
+      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
+      { status: 501 }
+    );
+  }
   if (!body.stagePhoto) {
     return NextResponse.json({ error: "stagePhoto (data URL) is required" }, { status: 400 });
   }
@@ -39,8 +41,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await generateImage({
-      model: body.model || DEFAULT_IMAGE_MODEL_ID,
+    const result = await (ark ? generateArkImage : generateOpenRouterImage)({
+      model,
       prompt: buildScreenTestPrompt(cast),
       input_references: [
         { type: "image_url", image_url: { url: body.stagePhoto } },
