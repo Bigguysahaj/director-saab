@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 resets buttons to the default cursor; clickable things get the hand. */
+@layer base {
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), select:not(:disabled), label[for] {
+    cursor: pointer;
+  }
+}
+
 :root {
   color-scheme: dark;
 

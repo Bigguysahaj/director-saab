@@ -15,6 +15,9 @@ export async function PATCH(
       stageColor?: string | null;
       sheet?: string; // data URL
       closeup?: string; // data URL
+      addCandidate?: string; // data URL
+      promoteCandidate?: string; // candidate filename
+      deleteCandidate?: string; // candidate filename
     };
 
     try {
@@ -25,6 +28,9 @@ export async function PATCH(
         stageColor: body.stageColor,
         sheetDataUrl: body.sheet,
         closeupDataUrl: body.closeup,
+        addCandidateDataUrl: body.addCandidate,
+        promoteCandidate: body.promoteCandidate,
+        deleteCandidate: body.deleteCandidate,
       });
       return NextResponse.json(toClientMember(projectId, member));
     } catch (err) {
