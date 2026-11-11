@@ -5,6 +5,7 @@ import { loadCast, type CastMember } from "@/lib/cast";
 import type { GenerateTakeRequest, VideoModel } from "@/lib/types";
 import { stageSpecForClip, type StageSpec } from "@/lib/stageSnapshots";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
+import { CastImageTicks, castImageOptions } from "@/components/CastImageTicks";
 
 const DEFAULT_MODEL = "bytedance/seedance-2.0-mini";
 const MAX_CHARACTER_IMAGES = 3;
@@ -131,8 +132,9 @@ export function SendTake({
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheetCast, setSheetCast] = useState<CastMember[]>([]);
-  // Latest dropdown pick, so a slower earlier load can't attach its sheets.
-  const pickedCastId = useRef("");
+  const [castMember, setCastMember] = useState<CastMember | null>(null);
+  // Latest tick change, so a slower earlier load can't attach its images.
+  const castLoad = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,18 +267,9 @@ export function SendTake({
                   className={FIELD}
                   onChange={(e) => {
                     edit();
-                    pickedCastId.current = e.target.value;
+                    castLoad.current++;
                     setCastImages([]);
-                    const member = sheetCast.find((m) => m.id === e.target.value);
-                    if (!member) return;
-                    // Both sheets go as-is, sheet first so it's @Image1.
-                    const urls = [member.sheet, member.closeup].filter(Boolean);
-                    pick(
-                      () => Promise.all(urls.map(async (url, i) => ({ name: i ? "close-up" : "sheet", dataUrl: await urlToDataUrl(url) }))),
-                      (imgs) => {
-                        if (pickedCastId.current === member.id) setCastImages(imgs);
-                      },
-                    );
+                    setCastMember(sheetCast.find((m) => m.id === e.target.value) ?? null);
                   }}
                 >
                   <option value="">—</option>
@@ -294,6 +287,24 @@ export function SendTake({
                 />
                 Use cast sheet
               </label>
+              {castMember && useCastSheet && (
+                <CastImageTicks
+                  key={castMember.id}
+                  member={castMember}
+                  disabled={disabled}
+                  onChange={(urls) => {
+                    // Ticked images go as-is in strip order, so the first one is @Image1.
+                    const load = ++castLoad.current;
+                    const names = Object.fromEntries(castImageOptions(castMember).map((o) => [o.url, o.label]));
+                    pick(
+                      () => Promise.all(urls.map(async (url) => ({ name: names[url], dataUrl: await urlToDataUrl(url) }))),
+                      (imgs) => {
+                        if (castLoad.current === load) setCastImages(imgs);
+                      },
+                    );
+                  }}
+                />
+              )}
               {activeCastImages.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {activeCastImages.map((img, i) => (
