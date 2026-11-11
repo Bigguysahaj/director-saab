@@ -17,16 +17,40 @@
  * the exact thing that went wrong.
  */
 
-// Fallback estimate when a model's actual billed cost isn't reported back
-// by the API (see /api/screen-test) — real cost varies per model chosen.
-// The model itself is chosen at generation time via the "DoP" picker in
-// ScreenTest.tsx (src/lib/imageModels.ts has the default and the catalog).
-export const SCREEN_TEST_COST_PER_IMAGE = 0.034;
-
 export type ScreenTestCastRef = {
   name: string;
   colorLabel: string; // human-readable mannequin color, e.g. "burnt orange" — see stageColors.ts
+  imageCount?: number; // reference images sent for this member (sheet + close-up); default 1
 };
+
+/** "reference image 3" or "reference images 2–3" for `count` images starting at `first`. */
+function refRange(first: number, count: number): string {
+  return count === 1 ? `reference image ${first}` : `reference images ${first}–${first + count - 1}`;
+}
+
+/**
+ * Prompt for the free Screen Test (no /stage photo): edit one dropped image,
+ * or put named cast members into a scene. References are ordered scene image
+ * first (if any), then each member's images.
+ */
+export function buildScenePrompt(cast: { name: string; imageCount: number }[], hasImage: boolean, prompt: string): string {
+  if (cast.length === 0) {
+    return `Edit reference image 1. Keep everything not mentioned unchanged and photoreal.\n\nChange: ${prompt}`;
+  }
+  let next = hasImage ? 2 : 1;
+  const people = cast.map((c) => {
+    const line = `- ${c.name} is shown in ${refRange(next, c.imageCount)}. Keep their face, hair, skin tone, body and outfit exactly.`;
+    next += c.imageCount;
+    return line;
+  });
+  return (
+    `Create one photoreal image.\n` +
+    (hasImage ? `Reference image 1 is the scene or look to use: keep its setting, light and style.\n` : "") +
+    `PEOPLE:\n${people.join("\n")}\n` +
+    `Each person appears once and stays recognisably themselves.\n\n` +
+    `SCENE: ${prompt}`
+  );
+}
 
 // "For now" per the user's own framing — a fixed backdrop swap. A later
 // pass could make this a per-shot choice (see studio-room-inspo memory for
@@ -37,14 +61,19 @@ const GARDEN_BACKGROUND =
 export function buildScreenTestPrompt(cast: ScreenTestCastRef[]): string {
   const ordinal = (n: number) => (n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`);
 
+  let next = 2; // reference image 1 is the stage photo
   const assignments = cast
-    .map(
-      (c, i) =>
+    .map((c, i) => {
+      const count = c.imageCount ?? 1;
+      const range = refRange(next, count);
+      next += count;
+      return (
         `- The ${c.colorLabel} mannequin becomes ${c.name} (the ${ordinal(i + 1)} reference person, ` +
-        `shown in reference image ${i + 2}). Copy that person's face, hair, skin tone, and exact ` +
+        `shown in ${range}). Copy that person's face, hair, skin tone, and exact ` +
         `outfit from their reference photo onto this mannequin's body — nothing else about this ` +
         `mannequin's placement changes.`
-    )
+      );
+    })
     .join("\n");
 
   return (

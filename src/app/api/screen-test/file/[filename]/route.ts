@@ -14,8 +14,8 @@ export async function GET(
   { params }: { params: Promise<{ filename: string }> }
 ) {
   const { filename } = await params;
-  // filename is only ever "latest.<ext>" (see screenTestStore.ts), but
-  // guard against path traversal via a crafted URL regardless.
+  // Filenames come from screenTestStore.ts, but guard against path
+  // traversal via a crafted URL regardless.
   if (filename.includes("/") || filename.includes("..")) {
     return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
   }

@@ -6,5 +6,6 @@ test("Screen Test has its own page", async ({ page }) => {
   await page.getByRole("link", { name: "Screen Test" }).click();
   await expect(page).toHaveURL(/\/screen-test$/);
   await expect(page.getByRole("heading", { name: "Screen Test" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Upload stage photo" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drop an image" })).toBeVisible();
+  await expect(page.getByLabel("Prompt")).toBeVisible();
 });

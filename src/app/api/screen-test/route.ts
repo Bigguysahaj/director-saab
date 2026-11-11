@@ -1,28 +1,34 @@
 import { NextResponse } from "next/server";
 import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
 import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
-import { SCREEN_TEST_COST_PER_IMAGE, buildScreenTestPrompt, type ScreenTestCastRef } from "@/lib/screenTest";
-import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
-import { readLatestScreenTest, saveScreenTest, toClientScreenTest } from "@/lib/screenTestStore";
+import { buildScenePrompt, buildScreenTestPrompt } from "@/lib/screenTest";
+import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
+import { listScreenTests, saveScreenTest, toClientScreenTest } from "@/lib/screenTestStore";
 
-/** Returns the last-generated Screen Test composite, if any, so /screen-test
- * can show it again after a refresh without re-generating. */
+/** Screen Test history, newest first. */
 export async function GET() {
-  const latest = await readLatestScreenTest();
-  return NextResponse.json(latest ? toClientScreenTest(latest) : null);
+  return NextResponse.json((await listScreenTests()).map(toClientScreenTest));
 }
 
+type CastIn = { name?: unknown; colorLabel?: unknown; images?: unknown };
+
+const bad = (error: string) => NextResponse.json({ error }, { status: 400 });
+
 /**
- * Composites a captured /stage photo with the reference photo of whichever
- * cast member is assigned to each color-coded mannequin — see screenTest.ts
- * for the prompt this builds and CastPanel.tsx for how a mannequin's color
- * ends up on a cast member in the first place.
+ * One paid image per call, three ways in:
+ * - edit: a dropped `image` + `prompt`
+ * - cast: `cast` members (+ optional scene `image`) + `prompt`
+ * - stage: a /stage `stagePhoto` + the cast assigned to its mannequins (see
+ *   screenTest.ts), with the owner's `prompt` appended if given.
+ * The client checks the model's reference cap; the server has no live catalog.
  */
 export async function POST(req: Request) {
   const body = (await req.json()) as {
-    stagePhoto?: string; // data URL
-    cast?: (ScreenTestCastRef & { photo: string })[]; // photo: data URL
-    model?: string; // Image-model id — see the DoP picker in ScreenTest.tsx
+    prompt?: unknown;
+    image?: unknown; // data URL
+    stagePhoto?: unknown; // data URL
+    cast?: CastIn[];
+    model?: string;
   };
   const model = body.model || DEFAULT_IMAGE_MODEL_ID;
   const ark = model.startsWith("modelark/");
@@ -32,32 +38,47 @@ export async function POST(req: Request) {
       { status: 501 }
     );
   }
-  if (!body.stagePhoto) {
-    return NextResponse.json({ error: "stagePhoto (data URL) is required" }, { status: 400 });
+
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  const image = typeof body.image === "string" && body.image ? body.image : null;
+  const stagePhoto = typeof body.stagePhoto === "string" && body.stagePhoto ? body.stagePhoto : null;
+  const castIn = Array.isArray(body.cast) ? body.cast : [];
+  if (image && stagePhoto) return bad("send either image or stagePhoto, not both");
+  if (!image && !stagePhoto && castIn.length === 0) return bad("an image, a stage photo or cast is required");
+  if (!stagePhoto && !prompt) return bad("prompt is required");
+  if (stagePhoto && castIn.length === 0) return bad("at least one cast assignment is required");
+
+  const cast: { name: string; colorLabel: string; images: string[] }[] = [];
+  for (const c of castIn) {
+    const images = Array.isArray(c.images) ? c.images.filter((u): u is string => typeof u === "string" && !!u) : [];
+    if (typeof c.name !== "string" || !c.name || images.length === 0) return bad("each cast member needs a name and images");
+    if (stagePhoto && (typeof c.colorLabel !== "string" || !c.colorLabel)) return bad("each stage cast member needs a colorLabel");
+    cast.push({ name: c.name, colorLabel: typeof c.colorLabel === "string" ? c.colorLabel : "", images });
   }
-  const cast = body.cast ?? [];
-  if (cast.length === 0) {
-    return NextResponse.json({ error: "at least one cast assignment is required" }, { status: 400 });
-  }
+
+  const counted = cast.map((c) => ({ name: c.name, colorLabel: c.colorLabel, imageCount: c.images.length }));
+  const scene = stagePhoto ?? image;
+  const fullPrompt = stagePhoto
+    ? buildScreenTestPrompt(counted) + (prompt ? `\n\nDIRECTOR'S NOTE: ${prompt}` : "")
+    : buildScenePrompt(counted, !!image, prompt);
+  const kind = stagePhoto ? "stage" : cast.length ? "cast" : "edit";
 
   try {
     const result = await (ark ? generateArkImage : generateOpenRouterImage)({
       model,
-      prompt: buildScreenTestPrompt(cast),
-      input_references: [
-        { type: "image_url", image_url: { url: body.stagePhoto } },
-        ...cast.map((c) => ({ type: "image_url" as const, image_url: { url: c.photo } })),
-      ],
+      prompt: fullPrompt,
+      input_references: [...(scene ? [scene] : []), ...cast.flatMap((c) => c.images)].map((url) => ({
+        type: "image_url" as const,
+        image_url: { url },
+      })),
     });
-    const image = result.data?.[0];
-    if (!image) throw new Error("No image returned");
+    const out = result.data?.[0];
+    if (!out) throw new Error("No image returned");
 
-    // Different models bill differently — use the actual reported cost when
-    // OpenRouter includes one, falling back to the known-good estimate for
-    // the default model only when it doesn't.
     const saved = await saveScreenTest(
-      `data:${image.media_type};base64,${image.b64_json}`,
-      result.usage?.cost ?? SCREEN_TEST_COST_PER_IMAGE
+      `data:${out.media_type};base64,${out.b64_json}`,
+      result.usage?.cost ?? IMAGE_PRICE_PER_CALL[model] ?? null,
+      { prompt, model, inputs: { kind, cast: cast.map((c) => c.name), image: !!scene } }
     );
     return NextResponse.json(toClientScreenTest(saved));
   } catch (err) {

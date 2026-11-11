@@ -3,21 +3,49 @@
 import { useEffect, useRef, useState } from "react";
 import { blobToDataUrl, loadCast, urlToDataUrl, type CastMember } from "@/lib/cast";
 import { colorLabel } from "@/lib/stageColors";
-import type { ScreenTestCastRef } from "@/lib/screenTest";
+import { IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 import type { ImageModel } from "@/lib/types";
 import { ImageModelSelect } from "@/components/ImageModelSelect";
+import { ImageViewer } from "@/components/ImageViewer";
 
-type ScreenTestResult = { image: string; cost: number; createdAt: number };
+type ScreenTestEntry = {
+  id: string;
+  image: string;
+  cost: number | null;
+  createdAt: number;
+  prompt: string;
+  model: string;
+  inputs: { kind: "edit" | "cast" | "stage"; cast: string[]; image: boolean };
+};
 
-/** /screen-test: the cast assigned on /stage composited into a stage photo. */
+/** Main sheet (+ close-up); without a sheet, the front-angle shot or the photo. */
+function memberImages(c: CastMember): string[] {
+  if (c.sheet) return [c.sheet, c.closeup].filter(Boolean);
+  const fallback = c.shots["angle-front"]?.image ?? c.photo;
+  return fallback ? [fallback] : [];
+}
+
+const pill = "rounded-full border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors disabled:opacity-40";
+
+/**
+ * /screen-test: one paid image from any mix of a dropped image, cast members
+ * and a prompt. Ticking "This is a /stage photo" runs the mannequin swap
+ * (screenTest.ts) with the cast assigned on /stage. Every result is kept in
+ * the history below.
+ */
 export function ScreenTest() {
   const [cast, setCast] = useState<CastMember[]>([]);
-  const [stagePhoto, setStagePhoto] = useState<string | null>(null);
-  const [screenTest, setScreenTest] = useState<ScreenTestResult | null>(null);
-  const [screenTestBusy, setScreenTestBusy] = useState(false);
-  const [screenTestError, setScreenTestError] = useState<string | null>(null);
-  const [dopModels, setDopModels] = useState<ImageModel[]>([]);
-  const [dopModel, setDopModel] = useState<string>("");
+  const [image, setImage] = useState<string | null>(null);
+  const [isStage, setIsStage] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [prompt, setPrompt] = useState("");
+  const [models, setModels] = useState<ImageModel[]>([]);
+  const [model, setModel] = useState("");
+  const [history, setHistory] = useState<ScreenTestEntry[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<{ src: string; label: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     // Fetched in an effect (not a lazy initializer) so the first client
@@ -27,19 +55,17 @@ export function ScreenTest() {
       if (!cancelled) setCast(loaded);
     });
     fetch("/api/screen-test")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((loaded) => {
-        if (!cancelled && loaded) setScreenTest(loaded);
+      .then((res) => (res.ok ? res.json() : []))
+      .then((loaded: ScreenTestEntry[]) => {
+        if (!cancelled && Array.isArray(loaded)) setHistory(loaded);
       })
       .catch(() => {});
-    // "DoP" picker — which OpenRouter image model generates the screen
-    // test. Fetched live so the catalog doesn't go stale in this file.
     fetch("/api/image-models")
       .then((res) => res.json())
       .then((data: { models: ImageModel[]; default: string }) => {
         if (cancelled) return;
-        setDopModels(data.models);
-        setDopModel(data.default);
+        setModels(data.models);
+        setModel(data.default);
       })
       .catch(() => {});
     return () => {
@@ -47,175 +73,178 @@ export function ScreenTest() {
     };
   }, []);
 
-  const assignedCast = cast.filter((c) => c.stageColor);
+  const stageMode = isStage && !!image;
+  const chosen = stageMode ? cast.filter((c) => c.stageColor) : cast.filter((c) => picked.includes(c.id));
+  const imageCount = (image ? 1 : 0) + chosen.reduce((n, c) => n + memberImages(c).length, 0);
+  const cap = models.find((m) => m.id === model)?.maxInputReferences;
+  const overCap = cap !== undefined && imageCount > cap;
+  const ready = stageMode ? chosen.length > 0 : !!prompt.trim() && (!!image || chosen.length > 0);
+  const estimate = IMAGE_PRICE_PER_CALL[model];
 
-  async function handleStagePhoto(file: File | null) {
-    if (!file) return;
-    setStagePhoto(await blobToDataUrl(file));
+  async function takeFile(file: File | null | undefined) {
+    if (file) setImage(await blobToDataUrl(file));
   }
 
-  async function generateScreenTest() {
-    if (!stagePhoto || assignedCast.length === 0 || screenTestBusy) return;
-    setScreenTestBusy(true);
-    setScreenTestError(null);
+  function toggle(id: string) {
+    setPicked((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  }
+
+  async function generate() {
+    if (!ready || overCap || busy) return;
+    setBusy(true);
+    setError(null);
     try {
-      const castRefs: (ScreenTestCastRef & { photo: string })[] = await Promise.all(
-        assignedCast.map(async (c) => ({
+      const castRefs = await Promise.all(
+        chosen.map(async (c) => ({
           name: c.name,
-          colorLabel: colorLabel(c.stageColor as string),
-          // Prefer the character sheet's front-angle shot (full-body,
-          // neutral pose) over the raw reference photo when one exists —
-          // it composites into a stage position far more reliably. Cast
-          // added from a ready-made sheet has neither, so use the sheet.
-          photo: await urlToDataUrl(c.shots["angle-front"]?.image ?? (c.photo || c.sheet)),
+          ...(stageMode ? { colorLabel: colorLabel(c.stageColor as string) } : {}),
+          images: await Promise.all(memberImages(c).map(urlToDataUrl)),
         }))
       );
+      const body = stageMode
+        ? { stagePhoto: image, cast: castRefs, prompt: prompt.trim() || undefined, model: model || undefined }
+        : { image: image ?? undefined, cast: castRefs.length ? castRefs : undefined, prompt: prompt.trim(), model: model || undefined };
       const res = await fetch("/api/screen-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stagePhoto, cast: castRefs, model: dopModel || undefined }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (res.ok) {
-        setScreenTest(data);
-      } else {
-        setScreenTestError(data.error ?? "Screen test failed");
-      }
+      if (res.ok) setHistory((prev) => [data, ...prev]);
+      else setError(data.error ?? "Screen test failed");
     } catch {
-      setScreenTestError("Screen test failed");
+      setError("Screen test failed");
     }
-    setScreenTestBusy(false);
+    setBusy(false);
   }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
-      <ScreenTestSection
-        assignedCast={assignedCast}
-        stagePhoto={stagePhoto}
-        onStagePhoto={handleStagePhoto}
-        busy={screenTestBusy}
-        error={screenTestError}
-        result={screenTest}
-        onGenerate={generateScreenTest}
-        dopModels={dopModels}
-        dopModel={dopModel}
-        onDopModel={setDopModel}
-      />
-    </div>
-  );
-}
-
-/**
- * Composites a captured /stage photo with whichever cast members are
- * currently assigned to a color-coded mannequin there (assignment happens
- * in CastPanel.tsx on /stage, which copies the mannequin's color onto the
- * cast member's `stageColor`). "Capture photo" on /stage downloads a PNG of
- * the current camera view — for now, screen test needs that file re-
- * uploaded here rather than grabbing the live canvas directly.
- */
-function ScreenTestSection({
-  assignedCast,
-  stagePhoto,
-  onStagePhoto,
-  busy,
-  error,
-  result,
-  onGenerate,
-  dopModels,
-  dopModel,
-  onDopModel,
-}: {
-  assignedCast: CastMember[];
-  stagePhoto: string | null;
-  onStagePhoto: (file: File | null) => void;
-  busy: boolean;
-  error: string | null;
-  result: ScreenTestResult | null;
-  onGenerate: () => void;
-  dopModels: ImageModel[];
-  dopModel: string;
-  onDopModel: (id: string) => void;
-}) {
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const canGenerate = !!stagePhoto && assignedCast.length > 0 && !busy;
-
-  return (
-    <div>
       <h1 className="font-display text-2xl text-fg">Screen Test</h1>
       <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-fg-dim">
-        Upload a captured /stage photo — its color-coded mannequins get swapped for whichever cast is assigned to that color
+        Drop an image, pick cast, say what you want — one image per run
       </p>
 
       <div className="mt-5 flex flex-wrap items-start gap-6">
         <div className="flex flex-col gap-2">
-          {stagePhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={stagePhoto} alt="Captured stage" className="h-32 w-48 rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-32 w-48 items-center justify-center rounded-xl border border-dashed border-border text-center text-[9px] uppercase tracking-[0.15em] text-fg-faint">
-              no stage photo
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Drop an image"
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void takeFile(e.dataTransfer.files?.[0]);
+            }}
+            className="flex h-32 w-48 items-center justify-center overflow-hidden rounded-xl border border-dashed border-border text-center text-[9px] uppercase tracking-[0.15em] text-fg-faint hover:border-accent"
+          >
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={image} alt="Dropped image" className="h-full w-full object-cover" />
+            ) : (
+              "Drop an image or click"
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void takeFile(e.target.files?.[0])} />
+          {image && (
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-fg-dim">
+                <input type="checkbox" checked={isStage} onChange={(e) => setIsStage(e.target.checked)} />
+                This is a /stage photo
+              </label>
+              <button type="button" onClick={() => { setImage(null); setIsStage(false); }} className={`w-fit border-border text-fg-dim hover:text-fg ${pill}`}>
+                Remove image
+              </button>
             </div>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => onStagePhoto(e.target.files?.[0] ?? null)}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-fit rounded-full border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] text-fg-dim transition-colors hover:border-accent hover:text-fg"
-          >
-            {stagePhoto ? "Change stage photo" : "Upload stage photo"}
-          </button>
         </div>
 
         <div className="flex min-w-48 flex-col gap-2">
           <span className="text-[10px] uppercase tracking-[0.2em] text-fg-dim">
-            {assignedCast.length === 0 ? "No cast assigned on stage" : "Cast assigned on stage"}
+            {stageMode ? "Cast assigned on stage" : "Cast"}
           </span>
-          {assignedCast.length === 0 ? (
-            <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">
-              Assign cast to mannequins on /stage to enable a screen test.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {assignedCast.map((member) => (
-                <span key={member.id} className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-fg-dim">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-border"
-                    style={{ backgroundColor: member.stageColor ?? undefined }}
-                  />
-                  {member.name}
-                </span>
-              ))}
-            </div>
+          {cast.length === 0 && <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">No cast yet — add some on the Cast page.</p>}
+          <div className="flex flex-wrap gap-2">
+            {cast.map((c) => {
+              const on = chosen.includes(c);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={stageMode || memberImages(c).length === 0}
+                  onClick={() => toggle(c.id)}
+                  className={`flex items-center gap-2 ${pill} ${on ? "border-accent text-accent" : "border-border text-fg-dim hover:text-fg"}`}
+                >
+                  {c.stageColor && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-border" style={{ backgroundColor: c.stageColor }} />}
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+          {stageMode && chosen.length === 0 && (
+            <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">Assign cast to mannequins on /stage first.</p>
           )}
         </div>
+      </div>
 
-        <ImageModelSelect label="DoP — Director of Photography" models={dopModels} value={dopModel} onChange={onDopModel} />
-
+      <div className="mt-5 flex flex-wrap items-end gap-4">
+        <textarea
+          aria-label="Prompt"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder={stageMode ? "Optional note, e.g. make it dusk" : "What should the shot be? e.g. make it night, Ana hands Ben a letter"}
+          rows={2}
+          className="min-w-72 flex-1 rounded-lg border border-border bg-bg p-2 text-sm text-fg outline-none"
+        />
+        <ImageModelSelect label="DoP — Director of Photography" models={models} value={model} onChange={setModel} />
+        <span className="text-[10px] uppercase tracking-[0.2em] text-fg-faint">
+          {estimate === undefined ? "est. unknown" : `est. $${estimate.toFixed(3)}`}
+        </span>
         <button
-          onClick={onGenerate}
-          disabled={!canGenerate}
-          className="h-fit rounded-full border border-accent px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-accent transition-colors hover:bg-accent hover:text-bg disabled:opacity-40"
+          onClick={() => void generate()}
+          disabled={!ready || overCap || busy}
+          className={`h-fit border-accent px-4 py-2 text-accent hover:bg-accent hover:text-bg ${pill}`}
         >
           {busy ? "Generating…" : "Generate screen test"}
         </button>
       </div>
 
-      {error && <p className="mt-3 text-[10px] uppercase tracking-[0.15em] text-accent">{error}</p>}
-
-      {result && (
-        <div className="mt-6 flex flex-col items-start gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={result.image} alt="Screen test composite" className="max-w-xl rounded-xl border border-border" />
-          <p className="text-[10px] uppercase tracking-[0.15em] text-fg-faint">
-            cost ${result.cost.toFixed(2)} · {new Date(result.createdAt).toLocaleString()}
-          </p>
-        </div>
+      {overCap && (
+        <p role="alert" className="mt-3 text-[10px] uppercase tracking-[0.15em] text-warn">
+          {imageCount} images — this model takes {cap}. Pick fewer cast or another model.
+        </p>
       )}
+      {error && <p role="alert" className="mt-3 text-[10px] uppercase tracking-[0.15em] text-accent">{error}</p>}
+
+      {history.length > 0 && (
+        <section aria-label="History" className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {history.map((h) => {
+            const label = `Screen test: ${h.prompt || h.inputs.kind}`;
+            return (
+              <figure key={h.id} className="flex flex-col gap-2 rounded-xl border border-border bg-bg-panel p-3">
+                <button type="button" onClick={() => setViewing({ src: h.image, label })} className="cursor-zoom-in">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={h.image} alt={label} className="w-full rounded-lg object-contain" />
+                </button>
+                <figcaption className="flex flex-col gap-1 text-[10px] text-fg-dim">
+                  {h.prompt && <span className="text-sm text-fg">{h.prompt}</span>}
+                  {h.inputs.cast.length > 0 && <span>Cast: {h.inputs.cast.join(", ")}</span>}
+                  <span className="flex flex-wrap gap-2 uppercase tracking-[0.15em] text-fg-faint">
+                    {h.model && <span>{h.model}</span>}
+                    <span>{h.cost === null ? "cost unknown" : `$${h.cost.toFixed(3)}`}</span>
+                    <span>{new Date(h.createdAt).toLocaleString()}</span>
+                  </span>
+                </figcaption>
+              </figure>
+            );
+          })}
+        </section>
+      )}
+
+      {viewing && <ImageViewer {...viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
