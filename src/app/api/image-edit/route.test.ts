@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/openrouter", () => ({ isConfigured: () => true, generateImage: vi.fn() }));
+const ark = vi.hoisted(() => ({ configured: true }));
+vi.mock("@/lib/modelark", () => ({ isArkConfigured: () => ark.configured, generateImage: vi.fn() }));
 
 import { generateImage } from "@/lib/openrouter";
+import { generateImage as generateArkImage } from "@/lib/modelark";
 import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
 import { POST } from "./route";
 
@@ -46,4 +49,26 @@ describe("POST /api/image-edit", () => {
     expect(res.status).toBe(502);
     expect((await res.json()).error).toContain("model not found");
   });
+
+  it("sends a modelark/ model to ModelArk, not OpenRouter", async () => {
+    ark.configured = true;
+    vi.mocked(generateArkImage).mockResolvedValue({ ...result, usage: { cost: 0.018 } });
+    const res = await post({ image, prompt: "x", model: "modelark/dola-seedream-5-0-flash-260915" });
+    expect(generateArkImage).toHaveBeenCalledWith(expect.objectContaining({
+      model: "modelark/dola-seedream-5-0-flash-260915",
+      input_references: [{ type: "image_url", image_url: { url: image } }],
+    }));
+    expect(generateImage).not.toHaveBeenCalled();
+    expect(await res.json()).toMatchObject({ cost: 0.018 });
+  });
+
+  it("returns 501 for a ModelArk model without ARK_API_KEY", async () => {
+    ark.configured = false;
+    const res = await post({ image, prompt: "x", model: "modelark/seedream-4-5-251128" });
+    expect(res.status).toBe(501);
+    expect((await res.json()).error).toContain("ARK_API_KEY");
+    expect(generateArkImage).not.toHaveBeenCalled();
+    ark.configured = true;
+  });
 });
+

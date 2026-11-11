@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { generateImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
+import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
 import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 
 /**
@@ -7,10 +8,6 @@ import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels"
  * Knows nothing about cast, so generated shots or photos can use it later.
  */
 export async function POST(req: Request) {
-  if (!isConfigured()) {
-    return NextResponse.json({ error: "OPENROUTER_API_KEY is not configured on the server." }, { status: 501 });
-  }
-
   const body = (await req.json()) as { image?: unknown; prompt?: unknown; model?: unknown };
   if (typeof body.image !== "string" || !body.image) {
     return NextResponse.json({ error: "image (data URL) is required" }, { status: 400 });
@@ -22,9 +19,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "model must be a non-empty string" }, { status: 400 });
   }
   const model = (body.model as string | undefined) ?? DEFAULT_IMAGE_MODEL_ID;
+  const ark = model.startsWith("modelark/");
+  if (ark ? !isArkConfigured() : !isConfigured()) {
+    return NextResponse.json(
+      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
+      { status: 501 }
+    );
+  }
 
   try {
-    const result = await generateImage({
+    const result = await (ark ? generateArkImage : generateOpenRouterImage)({
       model,
       prompt: `Edit this character sheet. Keep the layout, character identity and all other details unchanged. Change: ${body.prompt.trim()}`,
       input_references: [{ type: "image_url", image_url: { url: body.image } }],
