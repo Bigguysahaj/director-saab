@@ -125,6 +125,12 @@ export function SendTake({
   const activeCastImages = useCastSheet ? castImages : [];
   const images = [...activeCastImages, ...uploads];
   const [audio, setAudio] = useState<Media | null>(null);
+  // null = generator closed; [] = open, voices still loading or none.
+  const [voices, setVoices] = useState<{ id: string; name: string }[] | null>(null);
+  const [voiceId, setVoiceId] = useState("");
+  const [lineText, setLineText] = useState("");
+  const [generatingLine, setGeneratingLine] = useState(false);
+  const [generatedLine, setGeneratedLine] = useState<Media | null>(null);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>();
   const [resolution, setResolution] = useState<string>();
@@ -168,6 +174,32 @@ export function SendTake({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
+  }
+
+  async function openVoiceGenerator() {
+    setVoices([]);
+    try {
+      const res = await fetch("/api/tts/voices");
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Couldn't load ElevenLabs voices.");
+      setVoices(body);
+      setVoiceId(body[0]?.id ?? "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load ElevenLabs voices.");
+    }
+  }
+
+  async function generateLine() {
+    setGeneratingLine(true);
+    await pick(async () => {
+      const res = await fetch("/api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: lineText, voiceId }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't generate the voice line.");
+      return loadMedia(new File([await res.blob()], "voice-line.mp3", { type: "audio/mpeg" }), "audio");
+    }, (media) => {
+      setAudio(media);
+      setGeneratedLine(media);
+    });
+    setGeneratingLine(false);
   }
 
   function addImages(files: File[]) {
@@ -371,11 +403,45 @@ export function SendTake({
               className="text-[11px] text-fg-dim"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                setGeneratedLine(null);
                 if (!file) return setAudio(null);
                 pick(() => loadMedia(file, "audio"), setAudio);
               }}
             />
           </label>
+          {voices === null ? (
+            <button type="button" onClick={openVoiceGenerator} disabled={disabled} className="self-start text-[11px] text-fg-dim underline hover:text-fg">
+              Generate voice line
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <textarea
+                aria-label="Voice line text"
+                rows={2}
+                maxLength={500}
+                value={lineText}
+                disabled={disabled}
+                onChange={(e) => setLineText(e.target.value)}
+                className="w-full resize-none rounded-sm border border-border bg-bg-panel px-2 py-1 text-xs text-fg"
+              />
+              <div className="flex items-center gap-2">
+                <select aria-label="Voice" value={voiceId} disabled={disabled || !voices.length} className={FIELD} onChange={(e) => setVoiceId(e.target.value)}>
+                  {voices.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={generateLine}
+                  disabled={disabled || generatingLine || !lineText.trim() || !voiceId}
+                  className="rounded-sm border border-border px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-fg-dim hover:border-accent hover:text-fg disabled:opacity-30"
+                >
+                  {generatingLine ? "Generating…" : "Generate"}
+                </button>
+              </div>
+              {generatedLine && <audio src={generatedLine.previewUrl} controls aria-label="Generated voice line" className="h-8" />}
+            </div>
+          )}
         </div>
 
         <label className="flex flex-col gap-1">
