@@ -1,7 +1,11 @@
 import "server-only";
 import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { dataRoot } from "./dataRoot";
+import { mediaStore } from "./mediaStore";
 import { writeJson } from "./writeJson";
+
+export { dataRoot };
 
 /**
  * Projects on disk under .data/projects/ (gitignored). projects.json holds
@@ -16,12 +20,6 @@ export type Project = { id: string; name: string; createdAt: number };
 type ProjectsFile = { projects: Project[]; activeId: string };
 
 const DEFAULT_PROJECT_ID = "default";
-
-// Read per call (not at import) so tests and the e2e server can point it at
-// a scratch folder via DIRECTOR_DATA_DIR.
-export function dataRoot(): string {
-  return path.resolve(process.env.DIRECTOR_DATA_DIR ?? path.join(process.cwd(), ".data"));
-}
 
 function projectsRoot(): string {
   return path.join(dataRoot(), "projects");
@@ -163,6 +161,10 @@ export async function renameProject(id: string, rawName: string): Promise<Projec
 export async function deleteProject(id: string): Promise<ProjectsFile> {
   const file = await listProjects();
   if (!file.projects.some((p) => p.id === id)) throw new ProjectNotFoundError(id);
+
+  // Reference media is public by URL, so it goes first: if the store fails,
+  // the delete fails with the project untouched and can be retried.
+  await mediaStore().deleteAll(id);
 
   // Take logs are stored separately, with the project ID in take.json.
   const takes = path.join(dataRoot(), "takes");
