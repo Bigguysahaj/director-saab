@@ -1,8 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { fetchVideoContent, pollVideoJob } from "@/lib/openrouter";
 import { recordTakeResult } from "@/lib/takeLog";
-
-const TERMINAL = ["completed", "failed", "cancelled", "expired"];
+import { TERMINAL_STATUSES } from "@/lib/types";
 
 export async function GET(
   _req: Request,
@@ -19,7 +18,7 @@ export async function GET(
     );
   }
 
-  if (TERMINAL.includes(status.status)) {
+  if (TERMINAL_STATUSES.includes(status.status)) {
     const result = { status: status.status, cost: status.usage?.cost, error: status.error };
     // Saving the output means downloading the whole video; do it after the
     // response so the Studio isn't kept waiting on the log.

@@ -2,9 +2,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { dataRoot } from "./projectStore";
 import { parseDataUrl } from "./dataUrl";
-import { MEDIA_FILE_RE, mediaStore, PROJECT_RE } from "./mediaStore";
+import { MEDIA_FILE_RE, mediaDir, mediaStore, PROJECT_RE } from "./mediaStore";
 export { MediaConfigError } from "./mediaStore";
 import type { GenerateRequest, InputReference } from "./types";
 
@@ -15,10 +14,6 @@ import type { GenerateRequest, InputReference } from "./types";
  * shortcut: files are never cleaned up automatically; manual deletion is
  * tracked in ENG-027 (issue #52, storage page).
  */
-
-function mediaDir(): string {
-  return path.join(dataRoot(), "media");
-}
 
 async function publish(url: string, project: string, store: ReturnType<typeof mediaStore>): Promise<string> {
   const parsed = parseDataUrl(url, "bin");

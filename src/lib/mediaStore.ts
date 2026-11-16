@@ -27,6 +27,10 @@ function httpsBase(value: string, message: string): string {
   throw new MediaConfigError(message);
 }
 
+export function mediaDir(): string {
+  return path.join(dataRoot(), "media");
+}
+
 export function mediaStore() {
   const names = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_BASE_URL"] as const;
   const missing = names.filter((name) => !process.env[name]);
@@ -42,7 +46,7 @@ export function mediaStore() {
     service: "s3",
     region: "auto",
   }) : null;
-  const dir = path.join(dataRoot(), "media");
+  const dir = mediaDir();
 
   async function fetchR2(op: string, url: string, init: RequestInit): Promise<Response> {
     const res = await client!.fetch(url, init);

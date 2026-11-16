@@ -3,9 +3,11 @@ import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./dataRoot";
 import { mediaStore, PROJECT_RE } from "./mediaStore";
+import type { Project } from "./projects";
 import { writeJson } from "./writeJson";
 
 export { dataRoot };
+export type { Project };
 
 /**
  * Projects on disk under .data/projects/ (gitignored). projects.json holds
@@ -15,7 +17,6 @@ export { dataRoot };
  * it without passing it around.
  */
 
-export type Project = { id: string; name: string; createdAt: number };
 
 type ProjectsFile = { projects: Project[]; activeId: string };
 
