@@ -7,7 +7,7 @@
  * image in one API call, then cropped into individual shots client-side —
  * far cheaper than one call per shot (image-gen billing is dominated by a
  * fixed per-call output-token budget, not prompt complexity, so a 9-panel
- * grid costs about the same as a single panel; see CHARACTER_SHEET_COST).
+ * grid costs about the same as a single panel; see CHARACTER_SHEET_COST_PER_IMAGE).
  * The tradeoff is resolution: each cropped shot is roughly
  * (full image size / GRID_SIZE) per side. Generating all shots in one call
  * also means they're inherently consistent with each other (same
@@ -112,10 +112,6 @@ export const CHARACTER_SHEET_SHOTS: CharacterShot[] = [
     instruction: "Close-up head-and-shoulders portrait, wide-eyed surprised expression.",
   },
 ];
-
-// All 9 shots are generated in one grid image, so a full sheet is one
-// image-gen call, not nine.
-export const CHARACTER_SHEET_COST = CHARACTER_SHEET_COST_PER_IMAGE;
 
 // CHARACTER_SHEET_SHOTS.length must be GRID_SIZE * GRID_SIZE — the grid
 // prompt below lays panels out row-major in shot array order, and the

@@ -23,10 +23,6 @@ import { CastColorMark } from "./CastColorMark";
 
 const SHEET_MODEL_KEY = "director:cast-sheet-model";
 
-function fileToDataUrl(file: File): Promise<string> {
-  return blobToDataUrl(file);
-}
-
 /**
  * Crops the single 3x3 grid image returned by the API into 9 individual
  * shots (row-major, matching CHARACTER_SHEET_SHOTS order), splitting the
@@ -147,7 +143,7 @@ export function Audition() {
 
   async function handlePhoto(id: string, file: File | null) {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
+    const dataUrl = await blobToDataUrl(file);
     await patchMember(id, { photo: dataUrl });
   }
 

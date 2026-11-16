@@ -78,11 +78,6 @@ const DEFAULT_SIZE = { box: 0.8, ball: 0.5 };
 const PURSE_SIZE = { height: 0.3, length: 0.45, breadth: 0.2 };
 const PURSE_WALL = 0.012;
 const DEFAULT_FOV = 50;
-// Bump the suffix if SceneObject's shape ever changes, so old saved layouts
-// are ignored instead of crashing on load. v2 adds mannequin `pose` and
-// `keyframes`; v3 adds `castId` — all optional, but old saves are dropped
-// anyway per convention.
-
 // Opt-in "+ Keypoints" toggle: when on, Capture photo also downloads the eval
 // keypoint JSON (evals/). Off by default so a normal capture is just the PNG.
 // Read through useSyncExternalStore (same approach as usePoseLibrary) since the
@@ -1234,6 +1229,8 @@ export function StageScene() {
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       ctrlHeld.current = e.ctrlKey;
+      // Ctrl+Z, Cmd+P and the like are the browser's, not camera moves.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (e.key === "r" || e.key === "R") {

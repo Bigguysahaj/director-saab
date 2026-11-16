@@ -75,7 +75,7 @@ function deriveMeta(id: string) {
   const [providerSlug, ...rest] = id.split("/");
   const provider = providerSlug
     .split("-")
-    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .map((w) => (w[0]?.toUpperCase() || "") + w.slice(1))
     .join(" ");
   const label = (rest.join("/") || id)
     .split("-")
@@ -119,9 +119,10 @@ function derivePricePerSecond(raw: Record<string, unknown>): number | undefined 
 /**
  * Seedance prices per token, with a separate (cheaper) rate once a video
  * reference is attached; derivePricePerSecond ignores both. The SKU naming
- * isn't documented, so: any "token" key, "video" in it marks the
- * video-input rate, and a "million"-denominated key (or a value too large
- * to be per-token) is scaled down to USD per token.
+ * isn't documented, so: any "token" key, "video_input" in it marks the
+ * video-input rate (every live key starts with "video_tokens"), and a
+ * "million"-denominated key (or a value too large to be per-token) is
+ * scaled down to USD per token.
  */
 function deriveTokenRates(raw: Record<string, unknown>): { token_rate?: number; video_input_token_rate?: number } {
   const skus = raw.pricing_skus as Record<string, string> | undefined;
@@ -132,7 +133,7 @@ function deriveTokenRates(raw: Record<string, unknown>): { token_rate?: number; 
     let n = Number(value);
     if (!Number.isFinite(n) || n <= 0) continue;
     if (key.includes("million") || n >= 0.01) n /= 1_000_000;
-    const field = key.includes("video") ? "video_input_token_rate" : "token_rate";
+    const field = key.includes("video_input") ? "video_input_token_rate" : "token_rate";
     out[field] = Math.min(out[field] ?? Infinity, n);
   }
   return out;

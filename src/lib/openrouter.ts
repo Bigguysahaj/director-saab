@@ -62,7 +62,7 @@ export async function createVideoJob(
 }
 
 export async function pollVideoJob(id: string): Promise<PollJobResponse> {
-  const res = await fetch(`${BASE_URL}/videos/${id}`, {
+  const res = await fetch(`${BASE_URL}/videos/${encodeURIComponent(id)}`, {
     headers: headers(),
     cache: "no-store",
   });
@@ -73,7 +73,7 @@ export async function fetchVideoContent(
   id: string,
   index: number
 ): Promise<Response> {
-  const res = await fetch(`${BASE_URL}/videos/${id}/content?index=${index}`, {
+  const res = await fetch(`${BASE_URL}/videos/${encodeURIComponent(id)}/content?index=${index}`, {
     headers: headers(),
   });
   if (!res.ok) {

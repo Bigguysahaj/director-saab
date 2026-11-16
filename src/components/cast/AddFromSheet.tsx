@@ -30,7 +30,7 @@ export function AddFromSheetForm({
       const member = await createMember(name.trim());
       // Don't leave a sheetless member behind if the upload fails.
       const saved = await updateMember(member.id, { sheet, closeup: closeup || undefined }).catch((err) => {
-        deleteMember(member.id);
+        deleteMember(member.id).catch(() => {});
         throw err;
       });
       onAdded(saved);

@@ -120,7 +120,8 @@ export function fitAspect(w: number, h: number, aspect: number) {
 
 /** Output pixel size for a Seedance resolution label in portrait/landscape. */
 export function resolutionSize(resolution: string, aspectRatio: string): { width: number; height: number } {
-  const short = Number.parseInt(resolution, 10) || 480;
+  // parseInt alone reads "4K" as 4.
+  const short = ({ "2K": 1440, "4K": 2160 } as Record<string, number>)[resolution] ?? (Number.parseInt(resolution, 10) || 480);
   // ceil: 480p is 854 wide, not 853.
   const long = Math.ceil((short * 16) / 9);
   return aspectRatio === "9:16" ? { width: short, height: long } : { width: long, height: short };

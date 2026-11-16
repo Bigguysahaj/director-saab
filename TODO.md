@@ -70,21 +70,21 @@ https://rystorm.com/blog/translate-gizmo-design.
   stops. Roll keys moved from W/E to `,` / `.` to free the fly keys. Tests:
   `npm test` (pure maths, no deps) and `npm run test:e2e` (Playwright against
   a running dev server, reads the camera back out of the autosaved layout).
-- **Camera moves:** three hold-to-run moves — Dolly zoom in (I), Zoom (Z),
-  Pan (P) — behind a "+ Camera moves" popover, bound to both a key and a
-  press-and-hold toolbar button. Held, a move progresses at a fixed rate
-  every frame (`HoldMoveAnimator`, framerate-independent via useFrame's
-  `delta`); released, it stops per a Linear/Quad toggle — Linear halts
-  instantly, Quad eases out over ~0.4s. Dolly zoom in does the real Vertigo
-  effect (position + inverse FOV together, subject stays the same apparent
-  size while the background warps), not a plain push-in. **Future plan
-  ("other"):** more move types — crane, truck/dolly-track, arc, rack focus,
-  and a dolly-*zoom-out* counterpart; literal placeable rig props (a tripod
+- **Camera moves:** hold-to-run moves — dolly zoom in/out (I/O), zoom
+  (Z/X), pan (L/P), tilt (T/B), roll (,/.) — behind a "+ Camera moves"
+  popover, bound to both a key and a press-and-hold toolbar button. Held, a
+  move progresses at a fixed rate every frame (`HoldMoveAnimator`,
+  framerate-independent via useFrame's `delta`); released, it stops at once.
+  Whip pan and whip dolly zoom are one-click eased sweeps
+  (`WhipMoveAnimator`). Dolly zoom does the real Vertigo effect (position +
+  inverse FOV together, subject stays the same apparent size while the
+  background warps), not a plain push-in. **Future plan ("other"):** more
+  move types — crane, truck/dolly-track, arc, rack focus; literal placeable
+  rig props (a tripod
   to pan/tilt from, a dolly track/moving crate to physically attach the
   camera to) instead of the camera just animating itself in place.
-- **Inventory:** collapsed into a "+ Inventory" popover (Size/L/B dimension
-  inputs + Box/Ball/Mannequin buttons), replacing the old always-expanded
-  row.
+- **Inventory:** collapsed into a "+ Add" popover (Size/L/B dimension
+  inputs + Mannequin, Box/Ball/Purse and Wind machine buttons).
 - **Keyframing:** an 8s timeline bar (scrub track, Play/Pause, tick marks)
   bottom-docked under the toolbar, shown only while a keyframeable object is
   selected (`selected && canKeyframeSelection`) — Play with nothing selected
@@ -92,36 +92,35 @@ https://rystorm.com/blog/translate-gizmo-design.
   box/ball/purse/mannequin/camera's position/rotation can be recorded at the current
   playhead time via "+ Key" (and removed via "− Key"); between two
   keyframes it linearly interpolates, so scenes can have simple blocked-out
-  motion instead of being fully static. Root transform only — a
-  mannequin's joint poses (above) stay a static/manual-only control, not
-  part of a keyframe. Lights aren't keyframable. A keyframed camera gives a
+  motion instead of being fully static. A mannequin's key also stores its
+  joint pose, interpolated per joint. Lights aren't keyframable. A keyframed camera gives a
   moving shot; "Record take" plays the timeline from 0 while recording and
   stops at the end. Whole scenes export/import as JSON ("Export scene" /
   "Import scene", `director-stage-scene/v1`, validated in `scene.ts`;
   example: `docs/scenes/purse-hook.json`). **Future plan:** loop/ping-pong playback, more
-  than one clip, eased (not just linear) interpolation, keyframing joint
-  poses too.
+  than one clip, eased (not just linear) interpolation.
 - **Cast:** roster built on `/audition` — upload one reference photo per
   member, generate a 9-shot character sheet (4 body angles + 5 expressions)
-  via `/api/character-sheet` (one request per shot, always against the
-  original photo — see `src/lib/characterSheet.ts` for the anti-drift
-  rationale), per-shot error handling and running cost (actual billed cost
-  passed through from OpenRouter where reported). Default model is
+  via `/api/character-sheet` (one grid image per sheet, cropped into shots
+  in the browser — see `src/lib/characterSheet.ts`), with the billed cost
+  passed through from the provider where reported. A ready-made sheet can
+  be added whole instead ("Add from sheet") and edited into candidates. Default model is
   `google/gemini-3.1-flash-lite-image` (Muse Image is region-blocked from
-  the dev IP). Roster, photos and shots persist on disk under `.data/cast/`
-  (gitignored) via `/api/cast`, not the browser. On `/stage`, the "+ Cast"
+  the dev IP). Roster, photos and shots persist on disk per project under
+  `.data/projects/<id>/cast/` (gitignored) via `/api/cast`, not the browser. On `/stage`, the "+ Cast"
   popover assigns a roster member to the selected mannequin, which copies
   the mannequin's color-code onto the member (`stageColor`).
-- **Screen Test (on `/audition`):** composites a captured `/stage` photo
+- **Screen Test (`/screen-test`):** one image from any mix of a dropped
+  image, cast and a prompt. In stage mode it composites a captured `/stage` photo
   with the reference photos of whichever cast members are assigned to its
   color-coded mannequins, into a photoreal shot on a fixed garden backdrop
   (`src/lib/screenTest.ts` — prompt is strict about keeping blocking/
   spacing exact, after an early test merged two mannequins into one
   couple). Model chosen per run with the "DoP" picker, fed by OpenRouter's
   live image-model catalog via `/api/image-models` (fallback list in
-  `src/lib/imageModels.ts`). Only the latest result is kept
-  (`.data/screen-test/`). **Future plan:** selectable backdrops, result
-  history, tests for the cast/screen-test routes (none yet).
+  `src/lib/imageModels.ts`), plus Seedream via ModelArk when `ARK_API_KEY`
+  is set. Every result is kept in a history (`.data/screen-test/`).
+  **Future plan:** selectable backdrops.
 - **Layout persistence:** every change (drag, rotate, add, duplicate)
   auto-saves to `localStorage`; "Reset layout" clears it and returns to the
   default arrangement.

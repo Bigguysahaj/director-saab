@@ -7,6 +7,8 @@ import { SCENE_SCHEMA } from "@/components/stage/scene";
  * filmed even if the stage was edited afterwards.
  */
 
+// Bump the suffix if SceneObject's shape ever changes, so old saved layouts
+// are ignored instead of crashing on load.
 export const STAGE_LAYOUT_KEY = "director-stage-layout-v3";
 const SNAPSHOTS_KEY = "director-stage-snapshots-v1";
 export const MAX_SNAPSHOTS = 20;

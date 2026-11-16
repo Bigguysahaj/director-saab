@@ -108,7 +108,7 @@ def main() -> int:
             cast.append({"name": name, "color": hexcolor.lower(), "reference": photo})
         body = {
             "stagePhoto": data_url(Path(args.stage_photo)),
-            "cast": [{"name": c["name"], "colorLabel": labels.get(c["color"], c["color"]), "photo": data_url(Path(c["reference"]))} for c in cast],
+            "cast": [{"name": c["name"], "colorLabel": labels.get(c["color"], c["color"]), "images": [data_url(Path(c["reference"]))]} for c in cast],
         }
         if args.model:
             body["model"] = args.model

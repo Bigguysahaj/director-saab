@@ -54,7 +54,7 @@ The browser still sends `data:` URLs through `/api/generate`, and the server upl
 ## Notes
 
 - Generation history lives in the browser's `localStorage`, not a database — clearing site data clears your Dailies reel.
-- Image-to-video (reference frame) support is wired for any model whose catalog entry reports `supported_frame_images`; it sends a single first-frame reference. Multi-reference / video / audio reference inputs (`input_references`) aren't exposed in the UI yet.
+- Image-to-video (reference frame) support is wired for any model whose catalog entry reports `supported_frame_images`; it sends a single first-frame reference. Video, image and audio references (`input_references`) go through the "Send a stage take" panel, for models that accept a video reference.
 
 ## Stage poses and tests
 
