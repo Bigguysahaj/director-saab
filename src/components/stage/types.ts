@@ -21,8 +21,8 @@ export type SceneObject = {
   breadth?: number; // box/purse Z dimension — defaults to `size` (a cube) when unset
   fov?: number; // camera only
   pose?: MannequinPose; // mannequin only — static rig pose, used while no keyframe carries a pose
-  keyframes?: Keyframe[]; // box/ball/purse/mannequin only, sorted by time
-  castId?: string; // mannequin only — id into the /audition roster (src/lib/cast.ts), metadata only for now
+  keyframes?: Keyframe[]; // box/ball/purse/mannequin/camera only, sorted by time
+  castId?: string; // mannequin only — id into the /audition roster (src/lib/cast.ts)
   strength?: number; // wind only, >= 0
   gust?: boolean; // wind only
   at?: number; // wind only — start time in seconds, 0..TIMELINE_DURATION

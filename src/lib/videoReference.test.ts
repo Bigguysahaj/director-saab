@@ -2,7 +2,7 @@
 // docs/handoffs/2026-10-07-seedance-video-reference.md. Written before the
 // implementation: these fail until it lands.
 import { describe, expect, it } from "vitest";
-import { buildInputReferences, estimateVideoCost, fitAspect, pickRecorderMimeType } from "./videoReference";
+import { buildInputReferences, estimateVideoCost, fitAspect, pickRecorderMimeType, resolutionSize } from "./videoReference";
 
 // OpenRouter catalog rates for bytedance/seedance-2.0-mini (2026-10-07), USD per token.
 const MINI = { rate: 0.0000035, videoInputRate: 0.0000021 };
@@ -55,5 +55,14 @@ describe("fitAspect", () => {
   it("centers the largest 9:16 frame inside the viewport", () => {
     expect(fitAspect(1600, 900, 9 / 16)).toEqual({ x: 546.875, y: 0, width: 506.25, height: 900 });
     expect(fitAspect(900, 3200, 9 / 16)).toEqual({ x: 0, y: 800, width: 900, height: 1600 });
+  });
+});
+
+describe("resolutionSize", () => {
+  it("reads p labels and the 2K / 4K names", () => {
+    expect(resolutionSize("480p", "9:16")).toEqual({ width: 480, height: 854 });
+    expect(resolutionSize("720p", "16:9")).toEqual({ width: 1280, height: 720 });
+    expect(resolutionSize("2K", "16:9")).toEqual({ width: 2560, height: 1440 });
+    expect(resolutionSize("4K", "16:9")).toEqual({ width: 3840, height: 2160 });
   });
 });

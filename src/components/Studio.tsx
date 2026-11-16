@@ -14,8 +14,7 @@ import { Dailies } from "./Dailies";
 import { SendTake, type SubmittedTake } from "./SendTake";
 import { ProjectPicker } from "./ProjectPicker";
 
-function pickDefault<T>(options: T[], preferred?: T): T | undefined {
-  if (preferred !== undefined && options.includes(preferred)) return preferred;
+function pickDefault<T>(options: T[]): T | undefined {
   return options[Math.floor(options.length / 2)] ?? options[0];
 }
 
