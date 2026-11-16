@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import {
@@ -8,7 +8,7 @@ import {
   flyStep,
   hasFlyInput,
   lookStep,
-} from "../src/components/stage/flyMath.ts";
+} from "./flyMath";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 const forwardOf = (q: THREE.Quaternion) => new THREE.Vector3(0, 0, -1).applyQuaternion(q);

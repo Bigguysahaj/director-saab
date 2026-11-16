@@ -1,13 +1,13 @@
 /**
  * Prompt template for turning one reference photo into a same-person
  * character sheet (4 body angles + 5 expressions) via the model in
- * CHARACTER_SHEET_MODEL below.
+ * DEFAULT_IMAGE_MODEL_ID (imageModels.ts) unless the owner picks another.
  *
  * All 9 shots are generated together as a single GRID_SIZE x GRID_SIZE grid
  * image in one API call, then cropped into individual shots client-side —
  * far cheaper than one call per shot (image-gen billing is dominated by a
  * fixed per-call output-token budget, not prompt complexity, so a 9-panel
- * grid costs about the same as a single panel; see CHARACTER_SHEET_COST_PER_IMAGE).
+ * grid costs about the same as a single panel; see IMAGE_PRICE_PER_CALL in imageModels.ts).
  * The tradeoff is resolution: each cropped shot is roughly
  * (full image size / GRID_SIZE) per side. Generating all shots in one call
  * also means they're inherently consistent with each other (same
@@ -17,7 +17,7 @@
  * was modeled on).
  */
 
-export type CharacterShotKind = "angle" | "expression";
+type CharacterShotKind = "angle" | "expression";
 
 export type CharacterShot = {
   id: string;
@@ -25,24 +25,6 @@ export type CharacterShot = {
   label: string;
   instruction: string;
 };
-
-// meta/muse-image (Meta's would-be cheapest option) 403s "not available in
-// your region" from this dev IP (India) as of Sept 2026, retested
-// 2026-09-25 with no change — it's also dropped out of OpenRouter's general
-// /models listing, though its endpoint still resolves directly. Using
-// google/gemini-3.1-flash-lite-image ("Nano Banana 2 Lite") instead: same
-// OpenRouter source, no region issues observed, and the cheapest working
-// image-gen model as of this test. Re-check pricing/region access
-// periodically — OpenRouter's catalog turns over fast.
-export const CHARACTER_SHEET_MODEL = "google/gemini-3.1-flash-lite-image";
-
-// Real billed cost from a live test call (2026-09-25), not the nominal
-// per-token rate — image generation burns thousands of completion tokens,
-// so the listed prompt/completion prices alone understate it a lot. Image
-// generation is all-or-nothing billing, so this is close to exact per
-// successful shot, not an estimate — but re-check via a live call if it's
-// been a while, since providers do reprice.
-export const CHARACTER_SHEET_COST_PER_IMAGE = 0.034;
 
 const STUDIO_SETTING =
   "Soft, even studio lighting against a plain light-gray seamless background.";

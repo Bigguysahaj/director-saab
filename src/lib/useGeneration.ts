@@ -103,5 +103,5 @@ export function useGeneration(onSettled?: (state: GenerationState) => void) {
     setState({ jobId: null, status: "idle", error: null, videoUrl: null, cost: null });
   }, [stopPolling]);
 
-  return { state, submit, reset, stopPolling };
+  return { state, submit, reset };
 }

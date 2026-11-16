@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHARACTER_SHEET_MODEL, CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
+import { CHARACTER_SHEET_SHOTS, GRID_SIZE } from "@/lib/characterSheet";
 import {
   blobToDataUrl,
   createMember,
@@ -18,7 +18,7 @@ import { AddFromSheetForm } from "@/components/cast/AddFromSheet";
 import { ImageModelSelect } from "@/components/ImageModelSelect";
 import { ImageViewer } from "@/components/ImageViewer";
 import type { ImageModel } from "@/lib/types";
-import { IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
+import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 import { CastColorMark } from "./CastColorMark";
 
 const SHEET_MODEL_KEY = "director:cast-sheet-model";
@@ -84,7 +84,7 @@ export function Audition() {
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [addingFromSheet, setAddingFromSheet] = useState(false);
   const [sheetModels, setSheetModels] = useState<ImageModel[]>([]);
-  const [sheetModel, setSheetModel] = useState(CHARACTER_SHEET_MODEL);
+  const [sheetModel, setSheetModel] = useState(DEFAULT_IMAGE_MODEL_ID);
 
   useEffect(() => {
     let cancelled = false;
