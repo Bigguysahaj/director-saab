@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
-import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
+import { imageProvider } from "@/lib/imageProvider";
 import { buildCharacterSheetGridPrompt } from "@/lib/characterSheet";
 import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 
@@ -21,16 +20,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "model must be a non-empty string" }, { status: 400 });
   }
   const model = (body.model as string | undefined) ?? DEFAULT_IMAGE_MODEL_ID;
-  const ark = model.startsWith("modelark/");
-  if (ark ? !isArkConfigured() : !isConfigured()) {
-    return NextResponse.json(
-      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
-      { status: 501 }
-    );
-  }
+  const generate = imageProvider(model);
+  if (generate instanceof Response) return generate;
 
   try {
-    const result = await (ark ? generateArkImage : generateOpenRouterImage)({
+    const result = await generate({
       model,
       prompt: buildCharacterSheetGridPrompt(),
       input_references: [{ type: "image_url", image_url: { url: body.photo } }],

@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { dataRoot } from "./projectStore";
-import { mediaStore, PROJECT_RE } from "./mediaStore";
+import { parseDataUrl } from "./dataUrl";
+import { MEDIA_FILE_RE, mediaStore, PROJECT_RE } from "./mediaStore";
 export { MediaConfigError } from "./mediaStore";
 import type { GenerateRequest, InputReference } from "./types";
 
@@ -15,36 +16,14 @@ import type { GenerateRequest, InputReference } from "./types";
  * tracked in ENG-027 (issue #52, storage page).
  */
 
-export const MIME_BY_EXT: Record<string, string> = {
-  mp4: "video/mp4",
-  mov: "video/quicktime",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
-  png: "image/png",
-  jpg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-};
-const EXT_BY_MIME: Record<string, string> = {
-  ...Object.fromEntries(Object.entries(MIME_BY_EXT).map(([ext, mime]) => [mime, ext])),
-  "audio/mp3": "mp3",
-  "audio/x-wav": "wav",
-  "audio/wave": "wav",
-};
-
-export const MEDIA_FILE_RE = /^[0-9a-f-]{36}\.[a-z0-9]+$/;
-const DATA_URL_RE = /^data:([^;,]+)?(?:;[^,]*)?;base64,([\s\S]*)$/;
-
 function mediaDir(): string {
   return path.join(dataRoot(), "media");
 }
 
 async function publish(url: string, project: string, store: ReturnType<typeof mediaStore>): Promise<string> {
-  const match = DATA_URL_RE.exec(url);
-  if (!match) return url;
-  const [, mime = "application/octet-stream", data] = match;
-  const filename = `${randomUUID()}.${EXT_BY_MIME[mime.toLowerCase()] ?? "bin"}`;
-  const stored = await store.put(project, filename, Buffer.from(data, "base64"), mime);
+  const parsed = parseDataUrl(url, "bin");
+  if (!parsed) return url;
+  const stored = await store.put(project, `${randomUUID()}.${parsed.ext}`, parsed.buffer, parsed.mime);
   return stored.url;
 }
 
