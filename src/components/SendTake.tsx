@@ -6,6 +6,7 @@ import type { GenerateTakeRequest, VideoModel } from "@/lib/types";
 import { stageSpecForClip, type StageSpec } from "@/lib/stageSnapshots";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
 import { CastImageTicks, castImageOptions } from "@/components/CastImageTicks";
+import { VoiceLineGenerator } from "@/components/VoiceLineGenerator";
 
 const DEFAULT_MODEL = "bytedance/seedance-2.0-mini";
 const MAX_CHARACTER_IMAGES = 3;
@@ -125,6 +126,7 @@ export function SendTake({
   const activeCastImages = useCastSheet ? castImages : [];
   const images = [...activeCastImages, ...uploads];
   const [audio, setAudio] = useState<Media | null>(null);
+  const [audioGenerated, setAudioGenerated] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>();
   const [resolution, setResolution] = useState<string>();
@@ -371,11 +373,22 @@ export function SendTake({
               className="text-[11px] text-fg-dim"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                setAudioGenerated(false);
                 if (!file) return setAudio(null);
                 pick(() => loadMedia(file, "audio"), setAudio);
               }}
             />
           </label>
+          <VoiceLineGenerator
+            disabled={disabled}
+            previewUrl={audioGenerated ? audio?.previewUrl : null}
+            onError={setError}
+            onFile={async (file) => {
+              edit();
+              setAudio(await loadMedia(file, "audio"));
+              setAudioGenerated(true);
+            }}
+          />
         </div>
 
         <label className="flex flex-col gap-1">
