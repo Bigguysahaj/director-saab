@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
 import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
-import {
-  CHARACTER_SHEET_COST_PER_IMAGE,
-  CHARACTER_SHEET_MODEL,
-  buildCharacterSheetGridPrompt,
-} from "@/lib/characterSheet";
+import { buildCharacterSheetGridPrompt } from "@/lib/characterSheet";
+import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 
 /**
  * Generates a full 9-shot character sheet as one grid image in a single
@@ -23,7 +20,7 @@ export async function POST(req: Request) {
   if (body.model !== undefined && (typeof body.model !== "string" || !body.model)) {
     return NextResponse.json({ error: "model must be a non-empty string" }, { status: 400 });
   }
-  const model = (body.model as string | undefined) ?? CHARACTER_SHEET_MODEL;
+  const model = (body.model as string | undefined) ?? DEFAULT_IMAGE_MODEL_ID;
   const ark = model.startsWith("modelark/");
   if (ark ? !isArkConfigured() : !isConfigured()) {
     return NextResponse.json(
@@ -43,7 +40,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       image: `data:${image.media_type};base64,${image.b64_json}`,
-      cost: result.usage?.cost ?? CHARACTER_SHEET_COST_PER_IMAGE,
+      cost: result.usage?.cost ?? IMAGE_PRICE_PER_CALL[model] ?? null,
       model,
     });
   } catch (err) {

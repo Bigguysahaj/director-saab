@@ -27,9 +27,9 @@ export function estimateVideoCost({
   return tokens * (referenceVideoSeconds > 0 ? videoInputRate : rate);
 }
 
-export type TimedMedia = { url: string; seconds: number };
+type TimedMedia = { url: string; seconds: number };
 
-export const SEEDANCE_LIMITS = {
+const SEEDANCE_LIMITS = {
   videoMinSeconds: 2,
   videoMaxSeconds: 15,
   audioMaxSeconds: 15,

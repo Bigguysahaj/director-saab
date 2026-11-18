@@ -7,7 +7,7 @@ vi.mock("@/lib/modelark", () => ({ isArkConfigured: () => Boolean(process.env.AR
 
 import { generateImage as generateArkImage } from "@/lib/modelark";
 import { generateImage as generateOpenRouterImage } from "@/lib/openrouter";
-import { CHARACTER_SHEET_MODEL } from "@/lib/characterSheet";
+import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
 import { POST } from "./route";
 
 const photo = "data:image/png;base64,x";
@@ -30,11 +30,11 @@ describe("POST /api/character-sheet", () => {
     const res = await post({ photo });
     expect(res.status).toBe(200);
     expect(generateOpenRouterImage).toHaveBeenCalledWith(expect.objectContaining({
-      model: CHARACTER_SHEET_MODEL,
+      model: DEFAULT_IMAGE_MODEL_ID,
       input_references: [{ type: "image_url", image_url: { url: photo } }],
     }));
     expect(generateArkImage).not.toHaveBeenCalled();
-    expect(await res.json()).toMatchObject({ cost: 0.034, model: CHARACTER_SHEET_MODEL });
+    expect(await res.json()).toMatchObject({ cost: 0.034, model: DEFAULT_IMAGE_MODEL_ID });
   });
 
   it("passes an OpenRouter model through and returns its real cost", async () => {

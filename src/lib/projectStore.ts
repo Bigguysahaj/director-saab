@@ -15,7 +15,7 @@ export type Project = { id: string; name: string; createdAt: number };
 
 type ProjectsFile = { projects: Project[]; activeId: string };
 
-export const DEFAULT_PROJECT_ID = "default";
+const DEFAULT_PROJECT_ID = "default";
 
 // Read per call (not at import) so tests and the e2e server can point it at
 // a scratch folder via DIRECTOR_DATA_DIR.
@@ -62,7 +62,7 @@ async function writeProjects(file: ProjectsFile): Promise<void> {
  * First run creates Default and moves the pre-projects roster
  * (.data/cast/) into it as-is, so existing cast keeps its ids and files.
  */
-async function readProjects(): Promise<ProjectsFile> {
+export async function listProjects(): Promise<ProjectsFile> {
   try {
     return JSON.parse(await readFile(projectsPath(), "utf-8")) as ProjectsFile;
   } catch (err) {
@@ -85,17 +85,13 @@ async function readProjects(): Promise<ProjectsFile> {
   return file;
 }
 
-export async function listProjects(): Promise<ProjectsFile> {
-  return readProjects();
-}
-
 /** Creates a project and makes it the active one. */
 export async function createProject(rawName: string): Promise<Project> {
   const name = rawName.trim();
   const slug = slugify(name);
   if (!name || !slug) throw new Error("Project name is required");
 
-  const file = await readProjects();
+  const file = await listProjects();
   if (file.projects.some((p) => slugify(p.name) === slug)) {
     throw new Error(`A project called "${name}" already exists`);
   }
@@ -110,7 +106,7 @@ export async function createProject(rawName: string): Promise<Project> {
 }
 
 export async function setActiveProject(id: string): Promise<Project> {
-  const file = await readProjects();
+  const file = await listProjects();
   const project = file.projects.find((p) => p.id === id);
   if (!project) throw new ProjectNotFoundError(id);
   await writeProjects({ ...file, activeId: id });
@@ -129,7 +125,7 @@ export class ProjectNotFoundError extends Error {
  * unknown id.
  */
 export async function resolveProjectId(requested: string | null): Promise<string> {
-  const file = await readProjects();
+  const file = await listProjects();
   const id = requested ?? file.activeId;
   if (!file.projects.some((p) => p.id === id)) throw new ProjectNotFoundError(id);
   return id;
@@ -149,7 +145,7 @@ export async function withProject(req: Request, handler: (projectId: string) => 
 
 /** Renames the label only, preserving paths and take references. */
 export async function renameProject(id: string, rawName: string): Promise<Project> {
-  const file = await readProjects();
+  const file = await listProjects();
   const project = file.projects.find((p) => p.id === id);
   if (!project) throw new ProjectNotFoundError(id);
   const name = rawName.trim();
@@ -165,7 +161,7 @@ export async function renameProject(id: string, rawName: string): Promise<Projec
 
 /** Removes the project and its disk assets, then selects a surviving project. */
 export async function deleteProject(id: string): Promise<ProjectsFile> {
-  const file = await readProjects();
+  const file = await listProjects();
   if (!file.projects.some((p) => p.id === id)) throw new ProjectNotFoundError(id);
 
   // Take logs are stored separately, with the project ID in take.json.
