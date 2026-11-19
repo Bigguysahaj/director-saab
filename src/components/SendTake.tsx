@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadCast, type CastMember } from "@/lib/cast";
+import { loadCast, urlToDataUrl, type CastMember } from "@/lib/cast";
 import type { GenerateTakeRequest, VideoModel } from "@/lib/types";
 import { stageSpecForClip, type StageSpec } from "@/lib/stageSnapshots";
 import { buildInputReferences, estimateVideoCost, resolutionSize } from "@/lib/videoReference";
@@ -45,13 +45,6 @@ function readDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-}
-
-async function urlToDataUrl(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Couldn't load that character sheet.");
-  const blob = await res.blob();
-  return readDataUrl(new File([blob], "", { type: blob.type }));
 }
 
 /** Length of an audio/video file in seconds. MediaRecorder output often has

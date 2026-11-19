@@ -34,6 +34,7 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 // our on-disk file layout.
 export async function urlToDataUrl(url: string): Promise<string> {
   const res = await fetch(url);
+  if (!res.ok) throw new Error("Couldn't load that image.");
   return blobToDataUrl(await res.blob());
 }
 

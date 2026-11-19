@@ -1,7 +1,13 @@
 import "server-only";
 import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { dataRoot } from "./dataRoot";
+import { mediaStore, PROJECT_RE } from "./mediaStore";
+import type { Project } from "./projects";
 import { writeJson } from "./writeJson";
+
+export { dataRoot };
+export type { Project };
 
 /**
  * Projects on disk under .data/projects/ (gitignored). projects.json holds
@@ -11,17 +17,10 @@ import { writeJson } from "./writeJson";
  * it without passing it around.
  */
 
-export type Project = { id: string; name: string; createdAt: number };
 
 type ProjectsFile = { projects: Project[]; activeId: string };
 
 const DEFAULT_PROJECT_ID = "default";
-
-// Read per call (not at import) so tests and the e2e server can point it at
-// a scratch folder via DIRECTOR_DATA_DIR.
-export function dataRoot(): string {
-  return path.resolve(process.env.DIRECTOR_DATA_DIR ?? path.join(process.cwd(), ".data"));
-}
 
 function projectsRoot(): string {
   return path.join(dataRoot(), "projects");
@@ -31,11 +30,9 @@ function projectsPath(): string {
   return path.join(projectsRoot(), "projects.json");
 }
 
-const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 /** The project's folder; throws on any id that could step outside projects/. */
 export function projectDir(id: string): string {
-  if (!ID_RE.test(id)) throw new Error(`Invalid project id: ${id}`);
+  if (!PROJECT_RE.test(id)) throw new Error(`Invalid project id: ${id}`);
   return path.join(projectsRoot(), id);
 }
 
@@ -46,7 +43,7 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-async function exists(p: string): Promise<boolean> {
+export async function exists(p: string): Promise<boolean> {
   return stat(p).then(
     () => true,
     () => false
@@ -163,6 +160,10 @@ export async function renameProject(id: string, rawName: string): Promise<Projec
 export async function deleteProject(id: string): Promise<ProjectsFile> {
   const file = await listProjects();
   if (!file.projects.some((p) => p.id === id)) throw new ProjectNotFoundError(id);
+
+  // Reference media is public by URL, so it goes first: if the store fails,
+  // the delete fails with the project untouched and can be retried.
+  await mediaStore().deleteAll(id);
 
   // Take logs are stored separately, with the project ID in take.json.
   const takes = path.join(dataRoot(), "takes");
