@@ -28,6 +28,12 @@ describe("elevenlabs", () => {
     expect(Array.from(new Uint8Array(bytes))).toEqual([1, 2, 3]);
   });
 
+  it("encodes voice ids so a slash or space cannot change the request path", async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "Content-Type": "audio/mpeg" } }));
+    await textToSpeech("Hello", "rachel/clone 1");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/text-to-speech/rachel%2Fclone%201");
+  });
+
   it("lists voices as { id, name }", async () => {
     fetchMock.mockResolvedValue(Response.json({ voices: [{ voice_id: "a", name: "Rachel", category: "premade" }, { voice_id: "b", name: "Adam" }] }));
     expect(await listVoices()).toEqual([{ id: "a", name: "Rachel" }, { id: "b", name: "Adam" }]);

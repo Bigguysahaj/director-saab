@@ -22,4 +22,42 @@ describe("normalizeModel token rates", () => {
     expect(model.token_rate).toBe(0.0000035);
     expect(model.video_input_token_rate).toBe(0.0000021);
   });
+
+  // A "per million" SKU, or any token price >= $0.01, is dollars per million tokens.
+  it("scales million-denominated token SKUs down to USD per token", () => {
+    const model = normalizeModel({
+      id: "bytedance/seedance-2.0-mini",
+      pricing_skus: {
+        video_tokens_per_million: "3.5",
+        video_tokens_with_video_input_per_million: "2.1",
+      },
+    });
+    expect(model.token_rate).toBeCloseTo(0.0000035);
+    expect(model.video_input_token_rate).toBeCloseTo(0.0000021);
+  });
+});
+
+describe("normalizeModel per-second price", () => {
+  it("uses the cheapest per-second SKU and treats a cents_ key as cents", () => {
+    const model = normalizeModel({
+      id: "example/new-video",
+      pricing_skus: {
+        cents_per_second: "15",
+        output_per_second: "0.5",
+        per_megapixel_second: "0.001",
+        video_tokens: "0.0000035",
+      },
+    });
+    expect(model.price_per_second).toBe(0.15);
+  });
+});
+
+describe("normalizeModel labels", () => {
+  it("derives a label for an unknown id with an empty hyphen segment", () => {
+    const model = normalizeModel({ id: "acme--labs/super-clip" });
+    expect(model.provider).toContain("Acme");
+    expect(model.provider).toContain("Labs");
+    expect(model.label).toBe("Super Clip");
+    expect(`${model.provider} ${model.label}`).not.toMatch(/undefined/);
+  });
 });
