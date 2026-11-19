@@ -9,8 +9,15 @@ vi.mock("@/lib/openrouter", () => ({
   isConfigured: () => true,
   createVideoJob: vi.fn(async () => ({ id: "job-1", polling_url: "x", status: "pending" })),
 }));
+const ark = vi.hoisted(() => ({ configured: true }));
+vi.mock("@/lib/modelark", () => ({
+  isArkConfigured: () => ark.configured,
+  createVideoTask: vi.fn(async () => ({ id: "ark-cgt-1", polling_url: "", status: "pending" })),
+}));
 
+import { createVideoTask } from "@/lib/modelark";
 import { createVideoJob } from "@/lib/openrouter";
+import { readTake } from "@/lib/takeLog";
 import type { GenerateRequest } from "@/lib/types";
 import { POST } from "./route";
 
@@ -59,5 +66,24 @@ describe("POST /api/generate", () => {
     );
     expect(urls).toHaveLength(4);
     for (const url of urls) expect(url.startsWith("https://")).toBe(true);
+  });
+
+  it("routes modelark/ ids to ModelArk", async () => {
+    ark.configured = true;
+    const res = await post({ model: "modelark/dreamina-seedance-2-5-flash-261115", prompt: "a cup" });
+    expect(res.status).toBe(202);
+    expect((await res.json()).id).toBe("ark-cgt-1");
+    expect(createVideoTask).toHaveBeenCalledOnce();
+    expect(createVideoJob).not.toHaveBeenCalled();
+    expect((await readTake("ark-cgt-1")).id).toBe("ark-cgt-1");
+  });
+
+  it("returns 501 for modelark/ ids when ARK_API_KEY is unset", async () => {
+    ark.configured = false;
+    const res = await post({ model: "modelark/dreamina-seedance-2-5-flash-261115", prompt: "a cup" });
+    expect(res.status).toBe(501);
+    expect((await res.json()).error).toContain("ARK_API_KEY");
+    expect(createVideoTask).not.toHaveBeenCalled();
+    expect(createVideoJob).not.toHaveBeenCalled();
   });
 });

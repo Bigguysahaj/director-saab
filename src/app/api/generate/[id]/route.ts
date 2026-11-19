@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { fetchVideoTaskContent, isArkJob, pollVideoTask } from "@/lib/modelark";
 import { fetchVideoContent, pollVideoJob } from "@/lib/openrouter";
 import { recordTakeResult } from "@/lib/takeLog";
 
@@ -11,7 +12,7 @@ export async function GET(
   const { id } = await params;
   let status;
   try {
-    status = await pollVideoJob(id);
+    status = await (isArkJob(id) ? pollVideoTask(id) : pollVideoJob(id));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Poll failed" },
@@ -25,7 +26,7 @@ export async function GET(
     // response so the Studio isn't kept waiting on the log.
     after(async () => {
       try {
-        await recordTakeResult(id, result, () => fetchVideoContent(id, 0));
+        await recordTakeResult(id, result, () => (isArkJob(id) ? fetchVideoTaskContent(id) : fetchVideoContent(id, 0)));
       } catch (err) {
         // Takes from before logging existed have no record; that's fine.
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error(`Couldn't log result for take ${id}:`, err);

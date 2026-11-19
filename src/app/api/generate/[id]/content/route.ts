@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchVideoTaskContent, isArkJob } from "@/lib/modelark";
 import { fetchVideoContent } from "@/lib/openrouter";
 
 export async function GET(
@@ -9,7 +10,7 @@ export async function GET(
   const index = Number(new URL(req.url).searchParams.get("index") ?? "0");
 
   try {
-    const upstream = await fetchVideoContent(id, index);
+    const upstream = await (isArkJob(id) ? fetchVideoTaskContent(id) : fetchVideoContent(id, index));
     return new NextResponse(upstream.body, {
       headers: {
         "Content-Type": upstream.headers.get("content-type") ?? "video/mp4",

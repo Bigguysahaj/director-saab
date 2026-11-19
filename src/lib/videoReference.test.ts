@@ -2,6 +2,7 @@
 // docs/handoffs/2026-10-07-seedance-video-reference.md. Written before the
 // implementation: these fail until it lands.
 import { describe, expect, it } from "vitest";
+import { ARK_VIDEO_MODELS } from "./models";
 import { buildInputReferences, estimateVideoCost, fitAspect, pickRecorderMimeType } from "./videoReference";
 
 // OpenRouter catalog rates for bytedance/seedance-2.0-mini (2026-10-07), USD per token.
@@ -55,5 +56,14 @@ describe("fitAspect", () => {
   it("centers the largest 9:16 frame inside the viewport", () => {
     expect(fitAspect(1600, 900, 9 / 16)).toEqual({ x: 546.875, y: 0, width: 506.25, height: 900 });
     expect(fitAspect(900, 3200, 9 / 16)).toEqual({ x: 0, y: 800, width: 900, height: 1600 });
+  });
+});
+
+describe("estimateVideoCost for Seedance 2.5 Flash", () => {
+  it("prices Flash at $7 per 1M tokens", () => {
+    const flash = ARK_VIDEO_MODELS.find((m) => m.id === "modelark/dreamina-seedance-2-5-flash-261115")!;
+    const rates = { rate: flash.token_rate!, videoInputRate: flash.video_input_token_rate! };
+    expect(estimateVideoCost({ width: 854, height: 480, outputSeconds: 5, ...rates })).toBeCloseTo(0.336, 3);
+    expect(estimateVideoCost({ width: 1280, height: 720, outputSeconds: 5, ...rates })).toBeCloseTo(0.756, 3);
   });
 });

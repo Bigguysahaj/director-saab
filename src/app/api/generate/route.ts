@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
 import { MediaConfigError, publishDataReferences } from "@/lib/mediaReference";
+import { createVideoTask, isArkConfigured } from "@/lib/modelark";
 import { createVideoJob, isConfigured } from "@/lib/openrouter";
 import { resolveProjectId } from "@/lib/projectStore";
 import { logSubmittedTake } from "@/lib/takeLog";
 import type { GenerateTakeRequest } from "@/lib/types";
 
 export async function POST(req: Request) {
-  if (!isConfigured()) {
-    return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not configured on the server." },
-      { status: 501 }
-    );
-  }
-
   // `stage` (the /stage spec the take was recorded from) and `project` go
   // into the take log, never to OpenRouter.
   const { stage, project, ...body } = (await req.json()) as GenerateTakeRequest;
@@ -22,12 +16,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  const ark = body.model.startsWith("modelark/");
+  if (ark ? !isArkConfigured() : !isConfigured()) {
+    return NextResponse.json(
+      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
+      { status: 501 }
+    );
+  }
 
   // An unknown project still gets the take logged, just without one.
   const projectId = await resolveProjectId(project ?? null).catch(() => null);
   let job;
   try {
-    job = await createVideoJob(await publishDataReferences(body, projectId));
+    const published = await publishDataReferences(body, projectId);
+    job = await (ark ? createVideoTask(published) : createVideoJob(published));
   } catch (err) {
     if (err instanceof MediaConfigError) {
       return NextResponse.json({ error: err.message }, { status: 500 });

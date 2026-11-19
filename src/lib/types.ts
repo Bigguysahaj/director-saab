@@ -18,6 +18,8 @@ export type VideoModel = {
   // and the one that applies once a video reference is attached.
   token_rate?: number;
   video_input_token_rate?: number;
+  // Short highlight shown in the picker, e.g. "Fast · cheap".
+  badge?: string;
 };
 
 export type GenerationStatus =

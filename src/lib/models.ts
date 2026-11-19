@@ -279,3 +279,29 @@ export const FALLBACK_MODELS: VideoModel[] = [
     supports_video_reference: false,
   },
 ];
+
+// Served by BytePlus ModelArk directly (src/lib/modelark.ts), not OpenRouter.
+// /api/models adds these when ARK_API_KEY is set. Rates: BytePlus price
+// page, 2026-11-15, $7.00 per 1M tokens at 480p/720p.
+export const ARK_VIDEO_MODELS: VideoModel[] = [
+  {
+    id: "modelark/dreamina-seedance-2-5-flash-261115",
+    label: "Seedance 2.5 Flash",
+    provider: "ModelArk",
+    tagline: "Near-2.5 quality, twice as fast, about a third cheaper",
+    badge: "Fast · cheap",
+    supported_durations: [4, 6, 8, 10, 12, 16, 20, 24, 30],
+    supported_resolutions: ["480p", "720p"],
+    supported_aspect_ratios: ["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"],
+    supports_audio: true,
+    supports_seed: true,
+    supports_frame_images: true,
+    supports_input_references: true,
+    // 480p: 854*480*24/1024 tokens per second at $7 per 1M.
+    price_per_second: 0.0673,
+    supports_video_reference: true,
+    token_rate: 0.000007,
+    // shortcut: no published video-input discount for Flash yet, so estimates assume the full rate; update when BytePlus lists one.
+    video_input_token_rate: 0.000007,
+  },
+];

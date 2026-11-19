@@ -44,6 +44,11 @@ export function ModelPicker({
         <span className="flex flex-col">
           <span className="text-sm font-display italic">
             {value?.label ?? "Select a model"}
+            {value?.badge && (
+              <span className="ml-2 align-middle text-[9px] not-italic font-mono tracking-[0.1em] uppercase rounded-sm bg-accent-soft text-accent px-1.5 py-0.5">
+                {value.badge}
+              </span>
+            )}
           </span>
           {value?.tagline && (
             <span className="text-[11px] text-fg-dim">{value.tagline}</span>
@@ -76,7 +81,14 @@ export function ModelPicker({
                   }`}
                 >
                   <span className="flex flex-col">
-                    <span className="text-sm font-display italic">{m.label}</span>
+                    <span className="text-sm font-display italic">
+                      {m.label}
+                      {m.badge && (
+                        <span className="ml-2 align-middle text-[9px] not-italic font-mono tracking-[0.1em] uppercase rounded-sm bg-accent-soft text-accent px-1.5 py-0.5">
+                          {m.badge}
+                        </span>
+                      )}
+                    </span>
                     {m.tagline && (
                       <span className="text-[11px] text-fg-dim">{m.tagline}</span>
                     )}
