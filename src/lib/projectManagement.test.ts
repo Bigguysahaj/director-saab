@@ -139,3 +139,25 @@ it('an unreadable or mid-write take log does not block deleting a project', asyn
   await expect(stat(path.join(root, 'takes', 'source-job'))).rejects.toThrow();
   await stat(path.join(root, 'takes', 'target-job'));
 });
+const mediaFile = (projectId: string) => path.join(root, 'media', projectId, '123e4567-e89b-12d3-a456-426614174000.png');
+async function writeMedia(projectId: string) {
+  await mkdir(path.dirname(mediaFile(projectId)), { recursive: true });
+  await writeFile(mediaFile(projectId), 'media');
+}
+it("delete also removes the project's reference media", async () => {
+  const { source, target } = await fixture();
+  await writeMedia(source.id);
+  await writeMedia(target.id);
+  await projects.deleteProject(source.id);
+  await expect(stat(mediaFile(source.id))).rejects.toThrow();
+  expect(await readFile(mediaFile(target.id), 'utf8')).toBe('media');
+});
+it('a media delete failure keeps the project', async () => {
+  const { source } = await fixture();
+  await writeMedia(source.id);
+  vi.stubEnv('R2_BUCKET', 'b');
+  await expect(projects.deleteProject(source.id)).rejects.toThrow(/R2 configuration/);
+  expect((await projects.listProjects()).projects.some(p => p.id === source.id)).toBe(true);
+  await expect(stat(projects.projectDir(source.id))).resolves.toBeTruthy();
+  expect(await readFile(mediaFile(source.id), 'utf8')).toBe('media');
+});

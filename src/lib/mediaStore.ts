@@ -2,7 +2,7 @@ import "server-only";
 import { mkdir, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AwsClient } from "aws4fetch";
-import { dataRoot } from "./projectStore";
+import { dataRoot } from "./dataRoot";
 
 export class MediaConfigError extends Error {}
 
