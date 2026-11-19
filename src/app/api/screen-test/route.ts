@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateImage as generateOpenRouterImage, isConfigured } from "@/lib/openrouter";
-import { generateImage as generateArkImage, isArkConfigured } from "@/lib/modelark";
+import { imageProvider } from "@/lib/imageProvider";
 import { buildScenePrompt, buildScreenTestPrompt } from "@/lib/screenTest";
 import { DEFAULT_IMAGE_MODEL_ID, IMAGE_PRICE_PER_CALL } from "@/lib/imageModels";
 import { listScreenTests, saveScreenTest, toClientScreenTest } from "@/lib/screenTestStore";
@@ -31,13 +30,8 @@ export async function POST(req: Request) {
     model?: string;
   };
   const model = body.model || DEFAULT_IMAGE_MODEL_ID;
-  const ark = model.startsWith("modelark/");
-  if (ark ? !isArkConfigured() : !isConfigured()) {
-    return NextResponse.json(
-      { error: `${ark ? "ARK_API_KEY" : "OPENROUTER_API_KEY"} is not configured on the server.` },
-      { status: 501 }
-    );
-  }
+  const generate = imageProvider(model);
+  if (generate instanceof Response) return generate;
 
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   const image = typeof body.image === "string" && body.image ? body.image : null;
@@ -64,7 +58,7 @@ export async function POST(req: Request) {
   const kind = stagePhoto ? "stage" : cast.length ? "cast" : "edit";
 
   try {
-    const result = await (ark ? generateArkImage : generateOpenRouterImage)({
+    const result = await generate({
       model,
       prompt: fullPrompt,
       input_references: [...(scene ? [scene] : []), ...cast.flatMap((c) => c.images)].map((url) => ({

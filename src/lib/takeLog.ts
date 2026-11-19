@@ -1,7 +1,8 @@
 import "server-only";
-import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { dataRoot } from "./projectStore";
+import { parseDataUrl } from "./dataUrl";
+import { dataRoot, exists } from "./projectStore";
 import { writeJson } from "./writeJson";
 import type { GenerateRequest, GenerationStatus } from "./types";
 
@@ -79,26 +80,13 @@ function videoName(take: LoggedTake): string {
   return `${take.project ?? "untitled"}_take-${pad(take.takeNumber)}_${stamp}.mp4`;
 }
 
-const EXT_BY_MIME: Record<string, string> = {
-  "video/mp4": "mp4",
-  "video/quicktime": "mov",
-  "video/webm": "webm",
-  "audio/mpeg": "mp3",
-  "audio/wav": "wav",
-  "audio/x-wav": "wav",
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-};
-
 /** Writes a data URL out as a file; a plain https URL is kept as-is in the
  * record instead (nothing to save locally). */
 async function saveMedia(dir: string, baseName: string, url: string): Promise<string> {
-  const match = /^data:([^;,]+)?(?:;[^,]*)?;base64,([\s\S]*)$/.exec(url);
-  if (!match) return url;
-  const [, mime, base64] = match;
-  const filename = `${baseName}.${EXT_BY_MIME[mime ?? ""] ?? "bin"}`;
-  await writeFile(path.join(dir, filename), Buffer.from(base64, "base64"));
+  const parsed = parseDataUrl(url, "bin");
+  if (!parsed) return url;
+  const filename = `${baseName}.${parsed.ext}`;
+  await writeFile(path.join(dir, filename), parsed.buffer);
   return filename;
 }
 
@@ -161,15 +149,6 @@ export async function readTake(id: string): Promise<LoggedTake> {
 
 async function writeTake(take: LoggedTake): Promise<void> {
   await writeJson(path.join(takeDir(take.id), "take.json"), take);
-}
-
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Output downloads in progress, by take id, so two "completed" polls that

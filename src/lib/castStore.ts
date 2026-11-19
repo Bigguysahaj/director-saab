@@ -2,6 +2,7 @@ import "server-only";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { parseDataUrl } from "./dataUrl";
 import { writeJson } from "./writeJson";
 import { projectDir, resolveProjectId } from "./projectStore";
 
@@ -63,22 +64,10 @@ async function writeRoster(projectId: string, roster: StoredCastMember[]): Promi
   await writeJson(rosterPath(projectId), roster);
 }
 
-const EXT_BY_MIME: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
-function parseDataUrl(dataUrl: string): { buffer: Buffer; ext: string } {
-  const match = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl);
-  if (!match) throw new Error("Not a base64 data URL");
-  const [, mime, base64] = match;
-  return { buffer: Buffer.from(base64, "base64"), ext: EXT_BY_MIME[mime] ?? "jpg" };
-}
-
 async function saveMemberImage(projectId: string, id: string, baseName: string, dataUrl: string): Promise<string> {
-  const { buffer, ext } = parseDataUrl(dataUrl);
+  const parsed = parseDataUrl(dataUrl, "jpg");
+  if (!parsed) throw new Error("Not a base64 data URL");
+  const { buffer, ext } = parsed;
   const dir = memberDir(projectId, id);
   await mkdir(dir, { recursive: true });
   const filename = safeSegment("filename", `${baseName}.${ext}`);

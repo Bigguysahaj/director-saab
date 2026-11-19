@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { parseDataUrl } from "./dataUrl";
 import { dataRoot } from "./projectStore";
 import { writeJson } from "./writeJson";
 
@@ -18,20 +19,6 @@ export type ScreenTestEntry = ScreenTestMeta & { id: string; file: string; cost:
 
 const dir = () => path.join(dataRoot(), "screen-test");
 const historyPath = () => path.join(dir(), "history.json");
-
-const EXT_BY_MIME: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
-function parseDataUrl(dataUrl: string): { buffer: Buffer; ext: string } {
-  const match = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl);
-  if (!match) throw new Error("Not a base64 data URL");
-  const [, mime, base64] = match;
-  return { buffer: Buffer.from(base64, "base64"), ext: EXT_BY_MIME[mime] ?? "jpg" };
-}
 
 async function readJson<T>(file: string): Promise<T | null> {
   try {
@@ -57,7 +44,9 @@ export async function listScreenTests(): Promise<ScreenTestEntry[]> {
 }
 
 export async function saveScreenTest(imageDataUrl: string, cost: number | null, meta: ScreenTestMeta): Promise<ScreenTestEntry> {
-  const { buffer, ext } = parseDataUrl(imageDataUrl);
+  const parsed = parseDataUrl(imageDataUrl, "jpg");
+  if (!parsed) throw new Error("Not a base64 data URL");
+  const { buffer, ext } = parsed;
   await mkdir(dir(), { recursive: true });
   const id = `st-${randomUUID()}`;
   const entry: ScreenTestEntry = { ...meta, id, file: `${id}.${ext}`, cost, createdAt: Date.now() };

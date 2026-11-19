@@ -7,7 +7,7 @@ import { dataRoot } from "./dataRoot";
 export class MediaConfigError extends Error {}
 
 export const PROJECT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const NAME_RE = /^[0-9a-f-]{36}\.[a-z0-9]+$/;
+export const MEDIA_FILE_RE = /^[0-9a-f-]{36}\.[a-z0-9]+$/;
 
 function validateProject(project: string): void {
   if (!PROJECT_RE.test(project)) throw new Error(`Invalid media project: ${project}`);
@@ -16,7 +16,7 @@ function validateProject(project: string): void {
 function validateKey(key: string): void {
   const [project, name, extra] = key.split("/");
   validateProject(project);
-  if (!name || !NAME_RE.test(name) || extra !== undefined) throw new Error(`Invalid media key: ${key}`);
+  if (!name || !MEDIA_FILE_RE.test(name) || extra !== undefined) throw new Error(`Invalid media key: ${key}`);
 }
 
 function httpsBase(value: string, message: string): string {
@@ -25,6 +25,10 @@ function httpsBase(value: string, message: string): string {
     if (new URL(base).protocol === "https:") return base;
   } catch {}
   throw new MediaConfigError(message);
+}
+
+export function mediaDir(): string {
+  return path.join(dataRoot(), "media");
 }
 
 export function mediaStore() {
@@ -42,7 +46,7 @@ export function mediaStore() {
     service: "s3",
     region: "auto",
   }) : null;
-  const dir = path.join(dataRoot(), "media");
+  const dir = mediaDir();
 
   async function fetchR2(op: string, url: string, init: RequestInit): Promise<Response> {
     const res = await client!.fetch(url, init);
@@ -53,7 +57,7 @@ export function mediaStore() {
   const store = {
     async put(project: string, name: string, bytes: Buffer | Uint8Array, mime: string): Promise<{ key: string; url: string }> {
       validateProject(project);
-      if (!NAME_RE.test(name)) throw new Error(`Invalid media name: ${name}`);
+      if (!MEDIA_FILE_RE.test(name)) throw new Error(`Invalid media name: ${name}`);
       const key = `${project}/${name}`;
       if (r2) {
         // aws4fetch re-wraps the body as a stream, so without an explicit length the
@@ -77,7 +81,7 @@ export function mediaStore() {
           if (err.code === "ENOENT") return [];
           throw err;
         });
-        return entries.filter((name) => NAME_RE.test(name)).map((name) => `${project}/${name}`);
+        return entries.filter((name) => MEDIA_FILE_RE.test(name)).map((name) => `${project}/${name}`);
       }
       const keys: string[] = [];
       let token: string | undefined;

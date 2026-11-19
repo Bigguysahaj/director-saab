@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GenerateTakeRequest, GenerationStatus } from "./types";
+import { TERMINAL_STATUSES, type GenerateTakeRequest, type GenerationStatus } from "./types";
 
 export type GenerationState = {
   jobId: string | null;
@@ -10,8 +10,6 @@ export type GenerationState = {
   videoUrl: string | null;
   cost: number | null;
 };
-
-const TERMINAL: GenerationStatus[] = ["completed", "failed", "cancelled", "expired"];
 
 export function useGeneration(onSettled?: (state: GenerationState) => void) {
   const [state, setState] = useState<GenerationState>({
@@ -42,7 +40,7 @@ export function useGeneration(onSettled?: (state: GenerationState) => void) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Poll failed");
 
-        if (TERMINAL.includes(data.status)) {
+        if (TERMINAL_STATUSES.includes(data.status)) {
           const next: GenerationState = {
             jobId: id,
             status: data.status,

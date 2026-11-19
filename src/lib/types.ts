@@ -28,6 +28,8 @@ export type GenerationStatus =
   | "cancelled"
   | "expired";
 
+export const TERMINAL_STATUSES: GenerationStatus[] = ["completed", "failed", "cancelled", "expired"];
+
 export type CreateJobResponse = {
   id: string;
   polling_url: string;
