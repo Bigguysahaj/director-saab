@@ -15,6 +15,7 @@ import {
 } from "./types";
 import { deleteKeyframeNear, interpolatePose, interpolateTransform, upsertKeyframe } from "./keyframes";
 import { SCENE_SCHEMA, parseScene } from "./scene";
+import { recorderReducer, type RecorderEvent, type RecorderMode, type RecorderState } from "./recorder";
 import { FLY_BOOST, FLY_SPEED, MAX_FLY_DELTA, flyStep, hasFlyInput, lookStep, type FlyInput } from "./flyMath";
 import { PosePanel, JOINT_LABELS } from "./PosePanel";
 import { Mannequin } from "./Mannequin";
@@ -1051,7 +1052,17 @@ export function StageScene() {
   const [newBreadth, setNewBreadth] = useState(0.8);
   const [lookingThrough, setLookingThrough] = useState(false);
   const [dragLookEnabled, setDragLookEnabled] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [recorder, setRecorder] = useState<RecorderState>({ phase: "idle" });
+  // Mirror for the async start path, which outlives the render it began in.
+  const recorderRef = useRef(recorder);
+  /** Sends an event to the recorder; false when it was ignored in this phase. */
+  function sendRecorder(event: RecorderEvent) {
+    const next = recorderReducer(recorderRef.current, event);
+    if (next === recorderRef.current) return false;
+    recorderRef.current = next;
+    setRecorder(next);
+    return true;
+  }
   // Letterboxes camera view to a centred 9:16 frame and sizes the canvas to
   // it, so photos and recordings come out as real 9:16 pixels.
   const [frameLock, setFrameLock] = useState(false);
@@ -1088,11 +1099,7 @@ export function StageScene() {
     return () => observer.disconnect();
   }, []);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const recordedChunks = useRef<Blob[]>([]);
   const cameraFovRef = useRef<THREE.PerspectiveCamera | null>(null);
-  // Whether capture/recording auto-entered camera view (vs. the user already
-  // being there) — only auto-entered sessions auto-exit when done.
-  const autoEnteredCameraView = useRef(false);
   const holdRef = useRef<HoldState | null>(null);
   const whipRef = useRef<WhipState | null>(null);
 
@@ -1141,69 +1148,55 @@ export function StageScene() {
     }, "image/png");
   }
 
-  // Set while a "Record take" is running: the recorder stops itself when
-  // timeline playback reaches the end (see the effect below).
-  const recordingTake = useRef(false);
-
-  async function recordTake() {
-    if (isRecording || !cameraObj) return;
-    setIsPlaying(false);
-    setPlayheadTime(0);
-    await toggleRecording();
-    // toggleRecording can bail before starting (no canvas yet) — only arm
-    // the take if a recorder is actually running.
-    if (mediaRecorder.current?.state !== "recording") return;
-    recordingTake.current = true;
-    setIsPlaying(true);
+  function stopRecording() {
+    if (sendRecorder({ type: "stop" })) mediaRecorder.current?.stop();
   }
 
+  // A take stops itself when timeline playback ends (or is paused).
   useEffect(() => {
-    if (isRecording && recordingTake.current && !isPlaying) {
-      recordingTake.current = false;
-      mediaRecorder.current?.stop();
-    }
-  }, [isRecording, isPlaying]);
+    if (!isPlaying && sendRecorder({ type: "playbackEnded" })) mediaRecorder.current?.stop();
+  }, [isPlaying]);
 
-  async function toggleRecording() {
-    if (isRecording) {
-      mediaRecorder.current?.stop();
-      return;
-    }
+  async function startRecording(mode: RecorderMode) {
     // Same early-click guard as capturePhoto.
     if (!cameraObj || !canvasEl.current) return;
-    const wasLookingThrough = lookingThrough;
-    if (!wasLookingThrough) {
+    const autoEntered = !lookingThrough;
+    // Ignored while arming or recording, so a second click can't start a second recorder.
+    if (!sendRecorder({ type: "start", mode, autoEntered })) return;
+    if (mode === "take") {
+      setIsPlaying(false);
+      setPlayheadTime(0);
+    }
+    if (autoEntered) {
       setLookingThrough(true);
       await waitFrames(3);
     }
-    autoEnteredCameraView.current = !wasLookingThrough;
     const canvas = canvasEl.current;
-    if (!canvas) return;
     if (frameLock) await waitForCanvasAspect(canvas, FRAME_ASPECT);
+    // Ignored if camera view was exited while we waited: nothing to film.
+    if (!sendRecorder({ type: "armed" })) return;
     // Seedance takes MP4/MOV only; WebM is the fallback for browsers whose
     // MediaRecorder can't write MP4 (we don't bundle a transcoder).
     const { mimeType, ext, seedanceReady } = pickRecorderMimeType((t) => MediaRecorder.isTypeSupported(t));
     const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType });
     // The layout being filmed, logged with the take when it's sent (ENG-001).
     const recordedLayout = objects;
-    recordedChunks.current = [];
+    const chunks: Blob[] = [];
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.current.push(e.data);
+      if (e.data.size > 0) chunks.push(e.data);
     };
     recorder.onstop = () => {
-      // Every stop path (button, take end, pause) lands here, so a take cut
-      // short can't leave the flag set and kill the next manual recording.
-      recordingTake.current = false;
+      // Every stop path (button, take end, pause, leaving the view) lands here.
       const ts = Date.now();
       saveStageSnapshot(localStorage, ts, recordedLayout);
-      downloadBlob(new Blob(recordedChunks.current, { type: mimeType }), `stage-clip-${ts}.${ext}`);
+      downloadBlob(new Blob(chunks, { type: mimeType }), `stage-clip-${ts}.${ext}`);
       setRecorderNotice(seedanceReady ? null : "Saved as WebM: convert to MP4 before sending to Seedance.");
-      setIsRecording(false);
-      if (autoEnteredCameraView.current) setLookingThrough(false);
+      sendRecorder({ type: "stopped" });
+      if (autoEntered) setLookingThrough(false);
     };
     recorder.start();
     mediaRecorder.current = recorder;
-    setIsRecording(true);
+    if (mode === "take") setIsPlaying(true);
   }
 
   const nodes = useRef(new Map<number, THREE.Object3D>());
@@ -1294,8 +1287,8 @@ export function StageScene() {
   // Recording only makes sense while looking through the camera — stop it
   // (and trigger the download) if the user exits that view mid-recording.
   useEffect(() => {
-    if (!lookingThrough && mediaRecorder.current?.state === "recording") {
-      mediaRecorder.current.stop();
+    if (!lookingThrough && sendRecorder({ type: "exitView" }) && recorderRef.current.phase === "stopping") {
+      mediaRecorder.current?.stop();
     }
   }, [lookingThrough]);
 
@@ -1932,9 +1925,9 @@ export function StageScene() {
                       </button>
                     </div>
                   </details>
-                  {isRecording ? (
+                  {recorder.phase === "recording" || recorder.phase === "stopping" ? (
                     // Stop stays one click away, never tucked in a menu.
-                    <button onClick={toggleRecording} className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors bg-accent text-bg font-medium">
+                    <button onClick={stopRecording} className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors bg-accent text-bg font-medium">
                       ● Stop recording
                     </button>
                   ) : (
@@ -1942,15 +1935,17 @@ export function StageScene() {
                       <summary className="cursor-pointer list-none rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg [&::-webkit-details-marker]:hidden">Record ▾</summary>
                       <div className="absolute bottom-full left-0 mb-2 flex flex-col items-start gap-1 rounded-2xl border border-border bg-bg-panel p-2" onClick={closeMenuOnPick}>
                         <button
-                          onClick={toggleRecording}
-                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                          onClick={() => void startRecording("clip")}
+                          disabled={recorder.phase !== "idle"}
+                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg disabled:opacity-40"
                         >
                           Clip
                         </button>
                         <button
-                          onClick={recordTake}
+                          onClick={() => void startRecording("take")}
+                          disabled={recorder.phase !== "idle"}
                           title="Plays the timeline from 0 while recording and stops at the end"
-                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg"
+                          className="rounded-full px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors text-fg-dim hover:text-fg disabled:opacity-40"
                         >
                           Take
                         </button>
