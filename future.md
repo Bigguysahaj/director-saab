@@ -2,6 +2,28 @@
 
 Loose ideas parked for later. Nothing here is committed work.
 
+## One actor, many UGC looks
+
+**Idea:** let a creator keep the same underlying female actor across UGC
+videos while deliberately changing her makeup and hairstyle. Her face,
+identity, and other stable traits stay consistent; each new look is a
+controlled variation of that actor, not a new model.
+
+- Build a look library tied to the actor. A look records makeup, hair,
+  references, and the occasion or creative idea behind it.
+- Let the system learn from creator-provided makeup and hairstyle references
+  or tutorials, then suggest looks that fit a brief.
+- Describe makeup accurately with the names of techniques and products or
+  product types, including shades and placement where the reference supports
+  them. Avoid inventing exact product names from an image alone.
+- Offer hairstyle changes with named styles and practical details (parting,
+  texture, length, accessories) while preserving the same actor underneath.
+- Check generated results for both look fidelity and actor identity, so a
+  requested makeover does not silently change her face.
+
+**Why:** a UGC creator should be able to produce a range of believable,
+repeatable beauty looks with one recognizable on-screen actor.
+
 ## Mine movie end credits for how films actually get made
 
 **Origin:** noticed while watching the end credits of *Drishyam 3* — the
