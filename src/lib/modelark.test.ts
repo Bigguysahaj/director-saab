@@ -50,6 +50,34 @@ describe("ModelArk image generation", () => {
     });
   });
 
+  it("bills Seedream 5.0 Pro at the higher rate above 2.6 megapixels", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [
+        { b64_json: "A", size: "1024x1024" },
+        { b64_json: "B", size: "2048x2048" },
+      ],
+      usage: { generated_images: 2 },
+    })));
+    const result = await generateImage({ ...request, model: "modelark/dola-seedream-5-0-pro-260628" });
+    expect(result.usage.cost).toBeCloseTo(0.045 + 0.09);
+  });
+
+  it("multiplies the first image's price when generated_images disagrees with the payload", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [{ b64_json: "A", size: "2048x2048" }],
+      usage: { generated_images: 3 },
+    })));
+    const result = await generateImage({ ...request, model: "modelark/dola-seedream-5-0-pro-260628" });
+    expect(result.usage.cost).toBeCloseTo(0.27);
+  });
+
+  it("rejects an unknown model before calling Ark", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(generateImage({ ...request, model: "modelark/not-a-model" })).rejects.toThrow(/Unknown ModelArk/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([200, 400])("surfaces Ark error codes on HTTP %i", async (status) => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({
       error: { code: "InputImageSensitiveContentDetected", message: "image rejected" },
