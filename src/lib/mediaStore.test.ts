@@ -171,4 +171,41 @@ describe("mediaStore R2", () => {
     expect(fetchR2).not.toHaveBeenCalled();
     expect(await readdir(root)).toEqual([]);
   });
+
+  it("follows every page, decodes the continuation token, and skips keys it must not delete", async () => {
+    useR2();
+    const page2 = "00000000-0000-4000-8000-000000000003.mp3";
+    const pages = [
+      `<ListBucketResult>
+        <IsTruncated>true</IsTruncated>
+        <NextContinuationToken>tok&amp;en&lt;1</NextContinuationToken>
+        <Contents><Key>${KEY}</Key></Contents>
+        <Contents><Key>other/${NAME}</Key></Contents>
+        <Contents><Key>proj/not-a-media.txt</Key></Contents>
+      </ListBucketResult>`,
+      `<ListBucketResult>
+        <IsTruncated>false</IsTruncated>
+        <Contents><Key>proj/${page2}</Key></Contents>
+      </ListBucketResult>`,
+    ];
+    fetchR2.mockImplementation(async () => new Response(pages.shift()));
+    const { mediaStore } = await import("./mediaStore");
+    expect(await mediaStore().list("proj")).toEqual([KEY, `proj/${page2}`]);
+    expect(fetchR2).toHaveBeenCalledTimes(2);
+    const second = new URL(fetchR2.mock.calls[1][0]);
+    expect(second.searchParams.get("continuation-token")).toBe("tok&en<1");
+    expect(second.searchParams.get("prefix")).toBe("proj/");
+  });
+
+  it("fails a truncated list that cannot be continued, instead of returning a partial page", async () => {
+    useR2();
+    const { mediaStore } = await import("./mediaStore");
+    const truncated = (token: string) =>
+      `<ListBucketResult><IsTruncated>true</IsTruncated>${token}<Contents><Key>${KEY}</Key></Contents></ListBucketResult>`;
+    for (const xml of [truncated("<NextContinuationToken></NextContinuationToken>"), truncated("")]) {
+      fetchR2.mockReset();
+      fetchR2.mockResolvedValue(new Response(xml));
+      await expect(mediaStore().list("proj")).rejects.toThrow();
+    }
+  });
 });
