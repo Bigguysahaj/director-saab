@@ -1,8 +1,9 @@
 # Poses, character movement, and future language control
 
-Status: pose library implemented; character demeanor, language/voice control,
-IK, and joint animation are proposals, not implemented features.
-Research checked: 2026-09-25.
+Status: pose library and linear pose keyframes are implemented. Character
+demeanor, language/voice control, IK, and contact-aware transitions are
+proposals, not implemented features.
+Research checked: 2026-09-25. Pose keyframes checked against source: 2026-11-20.
 
 ## Current behavior
 
@@ -18,8 +19,16 @@ and clear character ownership because a foreign cast ID cannot safely identify
 a local character. Imported poses can be applied and saved for a local character.
 
 Presets change joint rotations only. Sitting and other poses may need the figure
-repositioned with Move. Joint rotations are static across the timeline; existing
-keyframes animate the figure's root transform only.
+repositioned with Move. A mannequin keyframe may also store a pose
+(`Keyframe.pose`). `interpolatePose` lerps every joint, per axis, between pose
+keyframes and holds the ends. A keyframe with no pose is ignored by that track,
+so a position-only key cannot snap the figure to neutral. With no pose
+keyframes the static `pose` is shown. Once any pose key exists, a pose edit
+(panel, library apply, or joint gizmo) auto-keys at the playhead and keeps the
+interpolated root position and rotation. **Add key** on a mannequin stores the
+pose shown at the playhead. Root position and rotation still interpolate on
+their own track, for mannequins and for props and cameras. Lights are not
+keyframable.
 
 ## Code boundaries
 
@@ -35,6 +44,8 @@ keyframes animate the figure's root transform only.
 - `PosePanel.tsx`: joint editing and applying poses to the selected figure.
 - `Mannequin.tsx`: articulated geometry; receives pose data, never reads storage.
 - `StageScene.tsx`: scene selection and updating the selected figure's pose.
+  **Add key** stores a mannequin's current pose on the keyframe.
+- `keyframes.ts`: `interpolatePose` and `upsertKeyframe` for the pose track.
 
 `stage/types.ts` re-exports rig types for existing stage consumers. The domain
 model does not depend on the UI. Rotations use radians and Three.js XYZ Euler
@@ -165,8 +176,9 @@ and licensing review, and animation-quality evaluation.
 4. Text prototype: a fixed command schema and fixture-based intent evaluations.
    No model access to storage or arbitrary execution.
 5. Voice: push-to-talk → visible transcript → same tested command engine.
-6. Motion: joint keyframes, rotation interpolation, transitions/contact handling,
-   and repeatable character-specific timing.
+6. Motion still ahead: contact-aware transitions and repeatable
+   character-specific timing. Linear joint keyframes are already in
+   `interpolatePose`.
 
 Before a model ships, evaluate held-out examples for left/right, “don't move the
 feet,” negation, relative adjustments, multiple characters, “a little more,”
@@ -178,9 +190,11 @@ latency, and cost. Structural validity alone is not an accuracy metric.
 
 `npm run check` runs TypeScript, repository lint, and Vitest tests for pose schema,
 asset isolation, persistence, invalid imports, character visibility, UI save/apply,
-storage failure, rig hierarchy and limb movement, and timeline operations.
+storage failure, rig hierarchy and limb movement, timeline operations, and pose
+keyframes (`src/components/stage/poseKeyframes.test.ts`).
 `npm run test:e2e` exercises the real stage in Chromium, including save/reload/apply,
-export, deletion, and invalid imports. GitHub Actions runs both on pushes and PRs.
+export, deletion, invalid imports, and pose keyframes
+(`tests/e2e/pose-keyframes.spec.ts`). GitHub Actions runs both on pushes and PRs.
 Browser tests use a dedicated port and isolated browser storage, with no model
 calls or paid services. They use the development server; they are not a production
 build or deployment check.
