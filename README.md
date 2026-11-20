@@ -15,6 +15,13 @@ Get a key at https://openrouter.ai/settings/keys and set it as `OPENROUTER_API_K
 
 Without a key, the app still runs in **demo mode**: the model picker shows a static fallback catalog so you can see the UI, but calling Action returns a clear "not configured" error instead of generating.
 
+Two other keys are optional, and also server-only:
+
+- `ARK_API_KEY` — BytePlus ModelArk, for Seedream image models (`modelark/…`) on Audition and Screen Test. Without it those models are left out of the picker, and a request for one returns 501.
+- `ELEVENLABS_API_KEY` — voice lines in Send take. Without it, voice listing returns 503; an uploaded MP3 or WAV still works.
+
+`DIRECTOR_DATA_DIR` overrides the `.data` directory (projects, cast, takes, screen tests, and local reference media). Leave it unset in normal dev. Restart `npm run dev` after changing environment variables.
+
 ### Sending takes with reference media
 
 OpenRouter only accepts `https` reference URLs. Cloudflare R2 is the preferred storage option: set all five variables in `.env.local` and no ngrok tunnel is needed:
@@ -37,7 +44,7 @@ ngrok http 3000
 PUBLIC_MEDIA_BASE_URL=https://<your-subdomain>.ngrok-free.app
 ```
 
-Without R2 or an https `PUBLIC_MEDIA_BASE_URL`, sending reference media fails with a configuration error. Files in either store are public to anyone with the link. Nothing is auto-deleted; manual deletion is tracked in ENG-027 (issue #52, storage page).
+Without R2 or an https `PUBLIC_MEDIA_BASE_URL`, sending reference media fails with a configuration error. Files in either store are public to anyone with the link. They are not expired on a timer. Deleting a project removes that project's reference media. Other cleanup is tracked in ENG-027 (issue #52, storage page).
 
 The browser still sends `data:` URLs through `/api/generate`, and the server uploads them. Vercel limits request bodies to about 4.5 MB, so large video references need presigned direct-to-R2 uploads as a follow-up.
 
@@ -49,19 +56,28 @@ The browser still sends `data:` URLs through `/api/generate`, and the server upl
 - `src/app/api/media/[project]/[filename]` — serves those stored references to OpenRouter.
 - `src/app/api/generate/[id]` — polls job status.
 - `src/app/api/generate/[id]/content` — streams the finished video back through the server, since OpenRouter's content endpoint needs the same `Authorization` header as the rest of the API (it can't be linked to directly from the browser).
-- `src/components/Studio.tsx` — the page: prompt, model/duration/resolution/aspect-ratio controls, the viewer, and the "Dailies" history strip (persisted to `localStorage`, per-browser).
+- `src/lib/imageProvider.ts` — image calls. A `modelark/…` id goes to ModelArk; anything else goes to OpenRouter. A missing key for that provider is a 501.
+- `src/app/api/character-sheet`, `src/app/api/image-edit`, `src/app/api/screen-test` — paid image jobs (a 9-shot sheet grid, one sheet edit, a screen test).
+- `src/app/api/image-models` — the DoP picker: live OpenRouter image models that accept at least two references, plus ModelArk models when `ARK_API_KEY` is set.
+- `src/app/api/tts` and `src/app/api/tts/voices` — ElevenLabs voice lines for Send take.
+- `src/lib/takeLog.ts` — every submitted video job is logged under `.data/takes/<jobId>/`.
+- `src/components/Studio.tsx` — the page: prompt, model/duration/resolution/aspect-ratio controls, the viewer, and the "Dailies" history strip (persisted to `localStorage`, per project).
+
+Image providers, Send take references, voice lines, and the on-disk layout are written up in [images, voice, and takes](docs/architecture/images-and-takes.md).
 
 ## Notes
 
-- Generation history lives in the browser's `localStorage`, not a database — clearing site data clears your Dailies reel.
+- The Dailies strip lives in the browser's `localStorage`, per project, capped at 60 takes. Clearing site data clears that reel. The server take log under `.data/takes/` is separate and is kept.
 - Image-to-video (reference frame) support is wired for any model whose catalog entry reports `supported_frame_images`; it sends a single first-frame reference. Video, image and audio references (`input_references`) go through the "Send a stage take" panel, for models that accept a video reference.
 
 ## Stage poses and tests
 
-`/stage` includes 14 static poses and a reusable pose library. Select a mannequin,
-enter **Pose**, and use the library to apply or save a pose. Assign a cast member
-to save poses for that character. **Export saved** backs up the browser library;
-**Import pack** adds compatible pose packs. Saved poses are local to this browser.
+`/stage` includes 14 static poses, a reusable pose library, and pose
+keyframes on the 8s timeline. Select a mannequin, enter **Pose**, and use the
+library to apply or save a pose. Assign a cast member to save poses for that
+character. **Export saved** backs up the browser library; **Import pack** adds
+compatible pose packs. Saved poses are local to this browser. A mannequin key
+stores the pose at the playhead; joint rotations lerp between those keys.
 
 Use Node.js 22. Install dependencies with `npm ci`, then run:
 
@@ -80,8 +96,8 @@ to one development server). Tests still use isolated browser storage. Failed bro
 in `test-results/`. The GitHub Actions workflow runs the checks and browser tests.
 
 See [posing architecture and roadmap](docs/architecture/posing.md) for the pose
-pack format, code boundaries, test scope, and future character demeanor and
-text/voice control design. Those AI and animation features are not implemented.
+pack format, pose keyframes, code boundaries, and test scope. Character demeanor
+and text/voice control described there are not implemented.
 
 Paused work: [pose library handoff, 2026-09-25](docs/handoffs/2026-09-25-pose-library.md)
 records implementation status and the remaining browser verification.
