@@ -2,11 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/openrouter", () => ({ isConfigured: () => true, generateImage: vi.fn() }));
+vi.mock("@/lib/openrouter", () => ({
+  isConfigured: () => Boolean(process.env.OPENROUTER_API_KEY),
+  generateImage: vi.fn(),
+}));
 vi.mock("@/lib/modelark", () => ({ isArkConfigured: () => Boolean(process.env.ARK_API_KEY), generateImage: vi.fn() }));
 
 import { generateImage as generateArkImage } from "@/lib/modelark";
 import { generateImage as generateOpenRouterImage } from "@/lib/openrouter";
+import { buildCharacterSheetGridPrompt } from "@/lib/characterSheet";
 import { DEFAULT_IMAGE_MODEL_ID } from "@/lib/imageModels";
 import { POST } from "./route";
 
@@ -17,6 +21,7 @@ const image = { data: [{ b64_json: "AAA", media_type: "image/png" }] };
 
 beforeEach(() => {
   vi.stubEnv("ARK_API_KEY", "test");
+  vi.stubEnv("OPENROUTER_API_KEY", "test");
   vi.mocked(generateOpenRouterImage).mockResolvedValue(image);
   vi.mocked(generateArkImage).mockResolvedValue({ ...image, usage: { cost: 0.04 } });
 });
@@ -31,6 +36,7 @@ describe("POST /api/character-sheet", () => {
     expect(res.status).toBe(200);
     expect(generateOpenRouterImage).toHaveBeenCalledWith(expect.objectContaining({
       model: DEFAULT_IMAGE_MODEL_ID,
+      prompt: buildCharacterSheetGridPrompt(),
       input_references: [{ type: "image_url", image_url: { url: photo } }],
     }));
     expect(generateArkImage).not.toHaveBeenCalled();
@@ -51,6 +57,21 @@ describe("POST /api/character-sheet", () => {
     expect(generateArkImage).toHaveBeenCalledWith(expect.objectContaining({ model }));
     expect(generateOpenRouterImage).not.toHaveBeenCalled();
     expect(await res.json()).toMatchObject({ cost: 0.04, model });
+  });
+
+  it("rejects a missing photo before calling a provider", async () => {
+    expect((await post({})).status).toBe(400);
+    expect((await post({ photo: "" })).status).toBe(400);
+    expect(generateOpenRouterImage).not.toHaveBeenCalled();
+    expect(generateArkImage).not.toHaveBeenCalled();
+  });
+
+  it("returns 501 when the OpenRouter key is missing", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    const res = await post({ photo });
+    expect(res.status).toBe(501);
+    expect((await res.json()).error).toContain("OPENROUTER_API_KEY");
+    expect(generateOpenRouterImage).not.toHaveBeenCalled();
   });
 
   it("rejects an empty or non-string model", async () => {

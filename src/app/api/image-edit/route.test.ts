@@ -24,9 +24,19 @@ describe("POST /api/image-edit", () => {
     expect(generateImage).toHaveBeenCalledTimes(1);
     const req = vi.mocked(generateImage).mock.calls[0][0];
     expect(req.model).toBe(FLASH);
-    expect(req.prompt).toContain("make the jacket red");
+    expect(req.prompt).toBe(
+      "Edit this character sheet. Keep the layout, character identity and all other details unchanged. Change: make the jacket red",
+    );
     expect(req.input_references).toEqual([{ type: "image_url", image_url: { url: image } }]);
     expect(await res.json()).toEqual({ image: "data:image/png;base64,AAA", cost: 0.018, model: FLASH });
+  });
+
+  it("trims the change before it is sent", async () => {
+    vi.mocked(generateImage).mockResolvedValue({ ...result, usage: { cost: 0.01 } });
+    await post({ image, prompt: "  red jacket  ", model: FLASH });
+    expect(vi.mocked(generateImage).mock.calls[0][0].prompt).toBe(
+      "Edit this character sheet. Keep the layout, character identity and all other details unchanged. Change: red jacket",
+    );
   });
 
   it("uses the default model and its fallback price", async () => {
