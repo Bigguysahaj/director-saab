@@ -96,6 +96,13 @@ describe("mediaStore local", () => {
     expect(await readFile(path.join(root, "media", "other", NAME))).toEqual(bytes);
   });
 
+  it("refuses a non-https public base before writing a file", async () => {
+    vi.stubEnv("PUBLIC_MEDIA_BASE_URL", "http://director.example");
+    const { mediaStore, MediaConfigError } = await import("./mediaStore");
+    await expect(mediaStore().put("proj", NAME, bytes, "video/mp4")).rejects.toBeInstanceOf(MediaConfigError);
+    expect(await readdir(root)).toEqual([]);
+  });
+
   it("delete rejects traversal and leaves files outside media untouched", async () => {
     const { mediaStore } = await import("./mediaStore");
     await mkdir(path.join(root, "projects"));
