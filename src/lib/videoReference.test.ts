@@ -38,8 +38,27 @@ describe("buildInputReferences", () => {
     expect(() => buildInputReferences({ video: { ...vid, url: "data:video/webm;base64,AAAA" } })).toThrow(/mp4|mov/i);
     expect(() => buildInputReferences({ video: { ...vid, seconds: 1 } })).toThrow(/2.*15|seconds/i);
     expect(() => buildInputReferences({ video: { ...vid, seconds: 16 } })).toThrow(/2.*15|seconds/i);
+    expect(() => buildInputReferences({ video: { ...vid, seconds: Number.NaN } })).toThrow(/seconds/i);
+    expect(() => buildInputReferences({ video: vid, audio: { ...aud, seconds: 0 } })).toThrow(/audio/i);
     expect(() => buildInputReferences({ video: vid, audio: { ...aud, seconds: 16 } })).toThrow(/audio/i);
     expect(() => buildInputReferences({ images: Array(10).fill(img) })).toThrow(/image/i);
+  });
+
+  it("accepts the 2s and 15s bounds, hosted URLs, and browser audio MIME aliases", () => {
+    expect(buildInputReferences({
+      video: { url: "https://cdn.example/clip.MOV?token=1", seconds: 2 },
+      audio: { url: "https://cdn.example/line.wav#t=0", seconds: 15 },
+    })).toEqual([
+      { type: "video_url", video_url: { url: "https://cdn.example/clip.MOV?token=1" } },
+      { type: "audio_url", audio_url: { url: "https://cdn.example/line.wav#t=0" } },
+    ]);
+    expect(() => buildInputReferences({ video: { url: "https://cdn.example/clip.webm?download=1", seconds: 8 } })).toThrow(/mp4|mov/i);
+    for (const url of ["data:audio/x-wav;base64,CCCC", "data:audio/wave;base64,CCCC", "data:audio/mp3;base64,CCCC"]) {
+      expect(buildInputReferences({ images: [img], audio: { url, seconds: 0.5 } })).toEqual([
+        { type: "image_url", image_url: { url: img } },
+        { type: "audio_url", audio_url: { url } },
+      ]);
+    }
   });
 });
 
@@ -48,6 +67,7 @@ describe("pickRecorderMimeType", () => {
     expect(pickRecorderMimeType((t) => t.startsWith("video/mp4"))).toEqual({ mimeType: "video/mp4;codecs=avc1", ext: "mp4", seedanceReady: true });
     expect(pickRecorderMimeType((t) => t === "video/mp4")).toEqual({ mimeType: "video/mp4", ext: "mp4", seedanceReady: true });
     expect(pickRecorderMimeType((t) => t.startsWith("video/webm")).seedanceReady).toBe(false);
+    expect(pickRecorderMimeType(() => false)).toEqual({ mimeType: "video/webm", ext: "webm", seedanceReady: false });
   });
 });
 

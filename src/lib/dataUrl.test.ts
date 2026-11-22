@@ -22,6 +22,13 @@ describe("parseDataUrl", () => {
   it("rejects a non-data URL", () => {
     expect(parseDataUrl("https://example.com/a.png", "jpg")).toBeNull();
   });
+
+  it("maps jpeg and the browser wav/mp3 aliases onto stored extensions", () => {
+    expect(parseDataUrl("data:image/jpeg;charset=utf-8;base64,cGhvdG8=", "bin")?.ext).toBe("jpg");
+    expect(parseDataUrl("data:AUDIO/X-WAV;base64,cGhvdG8=", "bin")?.ext).toBe("wav");
+    expect(parseDataUrl("data:audio/wave;base64,cGhvdG8=", "bin")?.ext).toBe("wav");
+    expect(parseDataUrl("data:audio/mp3;base64,cGhvdG8=", "bin")?.ext).toBe("mp3");
+  });
 });
 
 describe("contentType", () => {

@@ -112,6 +112,10 @@ export async function logSubmittedTake({
   }
   const frameImages: LoggedTake["frameImages"] = [];
   for (const frame of request.frame_images ?? []) {
+    // The type is a filename. Only the two known names may be written.
+    if (frame.frame_type !== "first_frame" && frame.frame_type !== "last_frame") {
+      throw new Error(`Invalid frame type: ${frame.frame_type}`);
+    }
     frameImages.push({ type: frame.type, frame_type: frame.frame_type, file: await saveMedia(dir, frame.frame_type, frame.image_url.url) });
   }
 
