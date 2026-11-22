@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -171,6 +171,51 @@ describe("takeLog", () => {
     await expect(logSubmittedTake({ id: "../evil", request })).rejects.toThrow();
   });
 
+  it("saves first and last frames, and keeps an https frame URL as-is", async () => {
+    const httpsFrame = "https://media.example.com/last.png";
+    await logSubmittedTake({
+      id: "job-frames",
+      request: {
+        model: "m",
+        prompt: "p",
+        frame_images: [
+          { type: "image_url", frame_type: "first_frame", image_url: { url: `data:image/png;base64,${b64("first")}` } },
+          { type: "image_url", frame_type: "last_frame", image_url: { url: httpsFrame } },
+        ],
+      },
+    });
+
+    const take = await readTake("job-frames");
+    expect(take.frameImages).toEqual([
+      { type: "image_url", frame_type: "first_frame", file: "first_frame.png" },
+      { type: "image_url", frame_type: "last_frame", file: httpsFrame },
+    ]);
+    expect((await readFile(path.join(takeDir("job-frames"), "first_frame.png"))).toString()).toBe("first");
+    expect(await readdir(takeDir("job-frames"))).not.toContain("last_frame.png");
+    expect(await readFile(path.join(takeDir("job-frames"), "take.json"), "utf-8")).not.toContain("base64");
+  });
+
+  it("refuses a frame type that would write outside the take folder", async () => {
+    const outside = path.join(root, "outside.png");
+    await expect(logSubmittedTake({
+      id: "job-escape",
+      request: {
+        model: "m",
+        prompt: "p",
+        frame_images: [{ type: "image_url", frame_type: "../../outside" as "first_frame", image_url: { url: `data:image/png;base64,${b64("x")}` } }],
+      },
+    })).rejects.toThrow(/frame type/i);
+    await expect(readFile(outside)).rejects.toThrow();
+    expect(await readdir(root)).not.toContain("outside.png");
+  });
+
+  it("numbers the next take when a sibling take.json cannot be read", async () => {
+    await mkdir(path.join(root, "takes", "broken"), { recursive: true });
+    await writeFile(path.join(root, "takes", "broken", "take.json"), "{");
+    await logSubmittedTake({ id: "job-next", request: { model: "m", prompt: "p" }, project: "gini" });
+    expect((await readTake("job-next")).takeNumber).toBe(1);
+  });
+
   describe("video names", () => {
     afterEach(() => {
       vi.useRealTimers();
@@ -198,6 +243,20 @@ describe("takeLog", () => {
       const name = "gini-first-vid_take-02_20261009-1432.mp4";
       expect((await readTake("g2")).output).toBe(name);
       expect((await readFile(path.join(takeDir("g2"), name))).toString()).toBe("video-out");
+    });
+
+    it("names a take with no project untitled and numbers it apart from named projects", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 9, 9, 14, 32));
+      await logSubmittedTake({ id: "bare", request: { model: "m", prompt: "p" } });
+      await logSubmittedTake({ id: "named", request: { model: "m", prompt: "p" }, project: "gini" });
+      await logSubmittedTake({ id: "bare-2", request: { model: "m", prompt: "p" } });
+
+      expect((await readTake("bare")).takeNumber).toBe(1);
+      expect((await readTake("bare-2")).takeNumber).toBe(2);
+      expect((await readTake("named")).takeNumber).toBe(1);
+      await recordTakeResult("bare", { status: "completed" }, async () => new Response("video-out"));
+      expect((await readTake("bare")).output).toBe("untitled_take-01_20261009-1432.mp4");
     });
 
     it("keeps takes saved before naming working as output.mp4", async () => {

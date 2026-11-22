@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { createMember, readMemberFile, readRoster, toClientMember, updateMember } from "./castStore";
+import { createMember, deleteMember, readMemberFile, readRoster, toClientMember, updateMember } from "./castStore";
 import { listProjects, projectDir } from "./projectStore";
 
 let root: string;
@@ -99,6 +99,62 @@ describe("castStore candidate sheets", () => {
     expect((await readMemberFile(projectId, id, m.sheet!)).toString()).toBe("new");
     expect(m.candidates).toHaveLength(1);
     expect((await readMemberFile(projectId, id, m.candidates![0])).toString()).toBe("main");
+  });
+});
+
+describe("castStore photo replacement", () => {
+  const jpg = (text: string) => `data:image/jpeg;base64,${Buffer.from(text).toString("base64")}`;
+
+  it("drops shots from the old photo, and a new extension removes the old file", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    const first = await updateMember(activeId, member.id, {
+      photoDataUrl: png("face-v1"),
+      shots: { front: { image: png("shot"), cost: 0.2, model: "m" } },
+    });
+    expect((await readMemberFile(activeId, member.id, first.shots.front.file)).toString()).toBe("shot");
+
+    const replaced = await updateMember(activeId, member.id, { photoDataUrl: png("face-v2") });
+    expect(replaced.photo).toBe("photo.png");
+    expect(replaced.shots).toEqual({});
+    expect((await readMemberFile(activeId, member.id, "photo.png")).toString()).toBe("face-v2");
+    await expect(readMemberFile(activeId, member.id, "front.png")).rejects.toThrow();
+
+    const jpeg = await updateMember(activeId, member.id, { photoDataUrl: jpg("face-v3") });
+    expect(jpeg.photo).toBe("photo.jpg");
+    expect((await readMemberFile(activeId, member.id, "photo.jpg")).toString()).toBe("face-v3");
+    await expect(readMemberFile(activeId, member.id, "photo.png")).rejects.toThrow();
+  });
+
+  it("rejects a photo that is not a data URL and leaves the shots on disk", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    await updateMember(activeId, member.id, {
+      photoDataUrl: png("face"),
+      shots: { front: { image: png("shot"), cost: 0.2 } },
+    });
+
+    await expect(updateMember(activeId, member.id, { photoDataUrl: "https://example.com/a.png" })).rejects.toThrow(/data URL/i);
+
+    const [saved] = await readRoster(activeId);
+    expect(saved.photo).toBe("photo.png");
+    expect((await readMemberFile(activeId, member.id, saved.shots.front.file)).toString()).toBe("shot");
+  });
+});
+
+describe("castStore delete", () => {
+  it("removes one member's files and leaves the rest of the cast", async () => {
+    const { activeId } = await listProjects();
+    const ana = await createMember(activeId, "Ana");
+    const ben = await createMember(activeId, "Ben");
+    await updateMember(activeId, ana.id, { photoDataUrl: png("ana") });
+    const benSaved = await updateMember(activeId, ben.id, { photoDataUrl: png("ben") });
+
+    await deleteMember(activeId, ana.id);
+
+    expect((await readRoster(activeId)).map((m) => m.id)).toEqual([ben.id]);
+    expect((await readMemberFile(activeId, ben.id, benSaved.photo!)).toString()).toBe("ben");
+    await expect(readMemberFile(activeId, ana.id, "photo.png")).rejects.toThrow();
   });
 });
 
