@@ -73,6 +73,30 @@ describe("projectStore", () => {
     expect(await readRoster(defaultId)).toEqual([]);
   });
 
+  it("does not replace a corrupt projects file with a new Default", async () => {
+    const file = path.join(root, "projects", "projects.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "{");
+
+    await expect(listProjects()).rejects.toThrow(SyntaxError);
+    expect(await readFile(file, "utf8")).toBe("{");
+  });
+
+  it("leaves a legacy roster in place when Default already has a cast folder", async () => {
+    const legacy = path.join(root, "cast");
+    const target = path.join(root, "projects", "default", "cast");
+    await mkdir(path.join(legacy, "cast-1"), { recursive: true });
+    await writeFile(path.join(legacy, "roster.json"), JSON.stringify([{ id: "cast-1", name: "Legacy", photo: null, shots: {} }]));
+    await mkdir(target, { recursive: true });
+    await writeFile(path.join(target, "roster.json"), JSON.stringify([{ id: "cast-2", name: "Kept", photo: null, shots: {} }]));
+
+    const { projects } = await listProjects();
+    expect(await readRoster(projects[0].id)).toEqual([{ id: "cast-2", name: "Kept", photo: null, shots: {} }]);
+    expect(JSON.parse(await readFile(path.join(legacy, "roster.json"), "utf8"))).toEqual([
+      { id: "cast-1", name: "Legacy", photo: null, shots: {} },
+    ]);
+  });
+
   it("refuses ids that would escape the project folder", async () => {
     const { activeId } = await listProjects();
     await expect(readRoster("../cast")).rejects.toThrow(/invalid/i);

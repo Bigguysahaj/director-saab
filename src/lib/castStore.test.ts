@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +21,8 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+const png = (text: string) => `data:image/png;base64,${Buffer.from(text).toString("base64")}`;
+
 describe("castStore shot model", () => {
   it("saves and loads a shot's model, and loads old rosters without one", async () => {
     const { activeId } = await listProjects();
@@ -41,9 +43,34 @@ describe("castStore shot model", () => {
     const [old] = await readRoster(activeId);
     expect(toClientMember(activeId, old).shots.front.model).toBeUndefined();
   });
-});
 
-const png = (text: string) => `data:image/png;base64,${Buffer.from(text).toString("base64")}`;
+  it("does not replace a corrupt roster with a new member", async () => {
+    const { activeId } = await listProjects();
+    const file = path.join(projectDir(activeId), "cast", "roster.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "{");
+
+    await expect(createMember(activeId, "Ana")).rejects.toThrow(SyntaxError);
+    expect(await readFile(file, "utf8")).toBe("{");
+  });
+
+  it("rejects a shot id that is not one safe filename", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    const rosterFile = path.join(projectDir(activeId), "cast", "roster.json");
+    const before = await readFile(rosterFile, "utf8");
+    const outside = path.join(projectDir(activeId), "escape.png");
+
+    for (const shotId of ["../escape", "a/b", "..", ".hidden"]) {
+      await expect(updateMember(activeId, member.id, {
+        shots: { [shotId]: { image: png("shot"), cost: 1 } },
+      })).rejects.toThrow(/invalid filename/i);
+    }
+
+    expect(await readFile(rosterFile, "utf8")).toBe(before);
+    await expect(stat(outside)).rejects.toThrow();
+  });
+});
 
 describe("castStore candidate sheets", () => {
   async function sheetMember() {
@@ -91,6 +118,14 @@ describe("castStore candidate sheets", () => {
     expect(toClientMember(projectId, m).candidates).toEqual([
       expect.stringMatching(new RegExp(`^/api/cast/${id}/file/candidate-[^/]+\\?project=${projectId}$`)),
     ]);
+  });
+
+  it("keeps the current sheet when a replacement is not a data URL", async () => {
+    const { projectId, id } = await sheetMember();
+    await expect(updateMember(projectId, id, { sheetDataUrl: "https://example.com/sheet.png" })).rejects.toThrow(/data URL/i);
+    const [member] = await readRoster(projectId);
+    expect((await readMemberFile(projectId, id, member.sheet!)).toString()).toBe("main");
+    expect(member.candidates ?? []).toEqual([]);
   });
 
   it("Replace main keeps the old sheet as a candidate", async () => {
