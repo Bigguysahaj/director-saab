@@ -152,6 +152,25 @@ it("delete also removes the project's reference media", async () => {
   await expect(stat(mediaFile(source.id))).rejects.toThrow();
   expect(await readFile(mediaFile(target.id), 'utf8')).toBe('media');
 });
+it('deleting a project leaves the active project and unrelated takes in place', async () => {
+  const { source, target } = await fixture();
+  await projects.setActiveProject(source.id);
+  await logSubmittedTake({ id: 'source-job', project: source.id, request: { model: 'test', prompt: 'take' } });
+  await logSubmittedTake({ id: 'prefix-job', project: `${source.id}-2`, request: { model: 'test', prompt: 'take' } });
+  await logSubmittedTake({ id: 'loose-job', project: null, request: { model: 'test', prompt: 'take' } });
+  await writeFile(path.join(root, 'takes', 'stray.txt'), 'not a take');
+
+  await projects.deleteProject(target.id);
+
+  const listed = await projects.listProjects();
+  expect(listed.activeId).toBe(source.id);
+  expect(listed.projects.map((p) => p.id)).not.toContain(target.id);
+  await stat(path.join(root, 'takes', 'source-job'));
+  await stat(path.join(root, 'takes', 'prefix-job'));
+  await stat(path.join(root, 'takes', 'loose-job'));
+  expect(await readFile(path.join(root, 'takes', 'stray.txt'), 'utf8')).toBe('not a take');
+});
+
 it('a media delete failure keeps the project', async () => {
   const { source } = await fixture();
   await writeMedia(source.id);

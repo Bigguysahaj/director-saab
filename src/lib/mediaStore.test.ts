@@ -96,6 +96,26 @@ describe("mediaStore local", () => {
     expect(await readFile(path.join(root, "media", "other", NAME))).toEqual(bytes);
   });
 
+  it("rejects a project or filename that is not a safe media key", async () => {
+    const { mediaStore } = await import("./mediaStore");
+    const store = mediaStore();
+    await expect(store.put("../projects", NAME, bytes, "video/mp4")).rejects.toThrow(/invalid media project/i);
+    await expect(store.put("Proj", NAME, bytes, "video/mp4")).rejects.toThrow(/invalid media project/i);
+    await expect(store.put("proj", "../x.mp4", bytes, "video/mp4")).rejects.toThrow(/invalid media name/i);
+    await expect(store.put("proj", "notes.txt", bytes, "video/mp4")).rejects.toThrow(/invalid media name/i);
+    await expect(readdir(path.join(root, "media"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("list ignores names that are not media files", async () => {
+    const { mediaStore } = await import("./mediaStore");
+    const store = mediaStore();
+    await store.put("proj", NAME, bytes, "video/mp4");
+    const dir = path.join(root, "media", "proj");
+    await writeFile(path.join(dir, "notes.txt"), "nope");
+    await writeFile(path.join(dir, "not-a-uuid.png"), "nope");
+    expect(await store.list("proj")).toEqual([KEY]);
+  });
+
   it("delete rejects traversal and leaves files outside media untouched", async () => {
     const { mediaStore } = await import("./mediaStore");
     await mkdir(path.join(root, "projects"));

@@ -19,6 +19,12 @@ it('renames and deletes projects through the API', async () => {
   expect((await routes.DELETE(request({ id: project.id }))).status).toBe(200);
   expect((await listProjects()).projects).toHaveLength(1);
 });
+it('refuses to activate an unknown project', async () => {
+  await listProjects();
+  expect((await routes.PATCH(request({ activeId: 'missing' }))).status).toBe(404);
+  expect((await routes.PATCH(request({ activeId: '' }))).status).toBe(404);
+  expect((await listProjects()).activeId).toBe('default');
+});
 it('returns 400 for invalid bodies and 404 for unknown projects', async () => {
   for (const body of [null, {}, { id: 'default', name: 1 }, { id: 'default', name: '' }]) expect((await routes.PATCH(request(body))).status).toBe(400);
   expect((await routes.PATCH(request({ id: 'missing', name: 'Film' }))).status).toBe(404);

@@ -146,6 +146,28 @@ describe("takeLog", () => {
     expect((await readTake("job-retry")).output).toMatch(/\.mp4$/);
   });
 
+  it("does not download output unless the take completed", async () => {
+    const fetchOutput = vi.fn(async () => new Response("video-out"));
+    for (const status of ["cancelled", "expired", "in_progress"] as const) {
+      const id = `job-${status}`;
+      await logSubmittedTake({ id, request });
+      await recordTakeResult(id, { status, error: status === "cancelled" ? "stopped" : undefined }, fetchOutput);
+      const take = await readTake(id);
+      expect(take).toMatchObject({ status, output: null, error: status === "cancelled" ? "stopped" : null });
+      expect((await readdir(takeDir(id))).some((name) => name === "output.mp4" || name.includes("_take-"))).toBe(false);
+    }
+    expect(fetchOutput).not.toHaveBeenCalled();
+  });
+
+  it("stores a zero cost instead of keeping the previous one", async () => {
+    await logSubmittedTake({ id: "job-free", request });
+    const fetchOutput = vi.fn(async () => new Response("video-out"));
+    await recordTakeResult("job-free", { status: "completed", cost: 1.5 }, fetchOutput);
+    await recordTakeResult("job-free", { status: "completed", cost: 0 }, fetchOutput);
+    expect(await readTake("job-free")).toMatchObject({ cost: 0, status: "completed" });
+    expect(fetchOutput).toHaveBeenCalledTimes(1);
+  });
+
   it("records a failed take with its error and no output", async () => {
     await logSubmittedTake({ id: "job-fail", request });
     const fetchOutput = vi.fn();
