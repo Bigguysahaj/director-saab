@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,5 +45,36 @@ describe("screenTestStore history", () => {
     expect(list[0].prompt).toBe("p");
     expect(list[1]).toMatchObject({ file: "latest.png", prompt: "", inputs: { kind: "stage" } });
     expect((await readScreenTestFile("latest.png")).toString()).toBe("old");
+  });
+
+  it("keeps a null cost, and orders a newer legacy result ahead of older history", async () => {
+    const saved = await saveScreenTest(png("saved"), null, { prompt: "saved", model: "m", inputs: { kind: "edit", cast: [], image: true } });
+    const dir = path.join(root, "screen-test");
+    await writeFile(path.join(dir, "latest.png"), "legacy");
+    await writeFile(path.join(dir, "latest.json"), JSON.stringify({ file: "latest.png", cost: 0.01, createdAt: saved.createdAt + 1 }));
+
+    const list = await listScreenTests();
+    expect(list.map((entry) => entry.file)).toEqual(["latest.png", saved.file]);
+    expect(list[1].cost).toBeNull();
+  });
+
+  it("rejects a result that is not a data URL and writes nothing", async () => {
+    await expect(saveScreenTest("https://example.com/a.png", 0.03, {
+      prompt: "p", model: "m", inputs: { kind: "edit", cast: [], image: true },
+    })).rejects.toThrow(/data URL/i);
+    await expect(readdir(root)).resolves.toEqual([]);
+  });
+
+  it("does not replace a corrupt history when a new result cannot be appended", async () => {
+    const dir = path.join(root, "screen-test");
+    const history = path.join(dir, "history.json");
+    await mkdir(dir, { recursive: true });
+    await writeFile(history, "{");
+
+    await expect(saveScreenTest(png("new"), 0.01, {
+      prompt: "p", model: "m", inputs: { kind: "edit", cast: [], image: true },
+    })).rejects.toThrow(SyntaxError);
+    await expect(listScreenTests()).rejects.toThrow(SyntaxError);
+    expect(await readFile(history, "utf8")).toBe("{");
   });
 });

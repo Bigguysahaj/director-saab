@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -102,6 +102,66 @@ describe("publishDataReferences", () => {
       ["video/mp4", "video"], ["image/png", "image"], ["audio/mpeg", "audio"],
       ["image/png", "first"], ["image/png", "last"],
     ].sort());
+  });
+
+  it("rewrites data URLs only, and keeps a hosted sibling and its frame type", async () => {
+    const hosted = "https://cdn.example.com/ref.png?token=1";
+    const hostedFrame = "https://cdn.example.com/last.png#still";
+    const data = (mime: string, value: string) => `data:${mime};base64,${Buffer.from(value).toString("base64")}`;
+    const request: GenerateRequest = {
+      model: "m",
+      prompt: "p",
+      input_references: [
+        { type: "video_url", video_url: { url: data("video/mp4", "video") } },
+        { type: "image_url", image_url: { url: hosted } },
+      ],
+      frame_images: [
+        { type: "image_url", frame_type: "first_frame", image_url: { url: data("image/png", "first") } },
+        { type: "image_url", frame_type: "last_frame", image_url: { url: hostedFrame } },
+      ],
+    };
+
+    const out = await publishDataReferences(request, "gini-first-vid");
+
+    const video = out.input_references![0];
+    const videoUrl = video.type === "video_url" ? video.video_url.url : "";
+    const frame = out.frame_images![0];
+    expect(videoUrl).toMatch(new RegExp(`^${BASE}/api/media/gini-first-vid/[0-9a-f-]{36}\\.mp4$`));
+    expect(frame.frame_type).toBe("first_frame");
+    expect(frame.image_url.url).toMatch(new RegExp(`^${BASE}/api/media/gini-first-vid/[0-9a-f-]{36}\\.png$`));
+    expect(out.input_references![1]).toEqual({ type: "image_url", image_url: { url: hosted } });
+    expect(out.frame_images![1]).toEqual({ type: "image_url", frame_type: "last_frame", image_url: { url: hostedFrame } });
+    expect(await readFile(path.join(root, "media", new URL(videoUrl).pathname.replace("/api/media/", "")))).toEqual(Buffer.from("video"));
+    expect(await readdir(path.join(root, "media"))).toEqual(["gini-first-vid"]);
+  });
+
+  it("stores a take with no project under untitled, and refuses a project that escapes that folder", async () => {
+    const dataUrl = `data:image/png;base64,${Buffer.from("png").toString("base64")}`;
+    const out = await publishDataReferences({
+      model: "m",
+      prompt: "p",
+      input_references: [{ type: "image_url", image_url: { url: dataUrl } }],
+    }, null);
+    const ref = out.input_references![0];
+    const url = ref.type === "image_url" ? ref.image_url.url : "";
+    expect(url).toMatch(new RegExp(`^${BASE}/api/media/untitled/[0-9a-f-]{36}\\.png$`));
+
+    await expect(publishDataReferences({
+      model: "m",
+      prompt: "p",
+      input_references: [{ type: "image_url", image_url: { url: dataUrl } }],
+    }, "../projects")).rejects.toThrow(/invalid media project/i);
+    expect(await readdir(path.join(root, "media"))).toEqual(["untitled"]);
+  });
+
+  it("does not write anything when every reference is already https", async () => {
+    const request: GenerateRequest = {
+      model: "m",
+      prompt: "p",
+      frame_images: [{ type: "image_url", frame_type: "first_frame", image_url: { url: "https://cdn.example.com/first.png" } }],
+    };
+    expect(await publishDataReferences(request, "proj")).toBe(request);
+    await expect(readdir(path.join(root, "media"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("throws MediaConfigError mentioning R2 when no public https storage is configured", async () => {
