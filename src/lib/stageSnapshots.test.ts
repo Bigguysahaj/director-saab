@@ -43,6 +43,37 @@ describe("stage snapshots", () => {
     expect(stageSpecForClip(localStorage, "stage-clip-17001.mp4").stage).toBeNull();
   });
 
+  it("replaces the snapshot for a timestamp and ignores a list it cannot read", () => {
+    saveStageSnapshot(localStorage, 1700, layout(1));
+    saveStageSnapshot(localStorage, 1700, layout(2));
+    expect(stageSpecForClip(localStorage, "stage-clip-1700.mp4").stage?.objects).toEqual(layout(2));
+    expect(JSON.parse(localStorage.getItem("director-stage-snapshots-v1")!)).toHaveLength(1);
+
+    localStorage.setItem("director-stage-snapshots-v1", "{");
+    expect(stageSpecForClip(localStorage, "stage-clip-1700.mp4")).toEqual({
+      stage: null,
+      warning: "No stage spec for this clip.",
+    });
+    saveStageSnapshot(localStorage, 1700, layout(3));
+    expect(stageSpecForClip(localStorage, "stage-clip-1700.mp4").stage?.objects).toEqual(layout(3));
+  });
+
+  it("does not warn when the current layout was never stored, and survives a store that rejects writes", () => {
+    saveStageSnapshot(localStorage, 1700, layout(1));
+    expect(stageSpecForClip(localStorage, "stage-clip-1700.mp4").warning).toBeNull();
+
+    const full: Storage = {
+      getItem: () => JSON.stringify([{ ts: 1700, objects: layout(1) }]),
+      setItem: () => { throw new Error("quota"); },
+      removeItem: () => {},
+      clear: () => {},
+      key: () => null,
+      length: 0,
+    };
+    expect(() => saveStageSnapshot(full, 1800, layout(2))).not.toThrow();
+    expect(stageSpecForClip(full, "stage-clip-1700.mp4").stage?.objects).toEqual(layout(1));
+  });
+
   it("notes a missing spec for renamed or unknown clips", () => {
     saveStageSnapshot(localStorage, 1700, layout(1));
 

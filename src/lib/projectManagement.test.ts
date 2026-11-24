@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
@@ -93,6 +93,8 @@ it('rejects invalid transfers without changing the source', async () => {
   await expect(cast.transferMember(source.id, member.id, target.id, 'move')).rejects.toThrow();
   expect(await cast.readRoster(source.id)).toHaveLength(1);
   expect(await cast.readRoster(target.id)).toEqual([]);
+  expect(await readdir(path.join(projects.projectDir(target.id), 'cast'))).toEqual([]);
+  expect((await cast.readMemberFile(source.id, member.id, 'sheet.png')).toString()).toBe('photo');
 });
 
 it('delete also removes project take logs and videos stored outside its folder', async () => {

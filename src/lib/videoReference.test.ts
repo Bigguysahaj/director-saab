@@ -64,5 +64,8 @@ describe("resolutionSize", () => {
     expect(resolutionSize("720p", "16:9")).toEqual({ width: 1280, height: 720 });
     expect(resolutionSize("2K", "16:9")).toEqual({ width: 2560, height: 1440 });
     expect(resolutionSize("4K", "16:9")).toEqual({ width: 3840, height: 2160 });
+    expect(resolutionSize("1080p", "16:9")).toEqual({ width: 1920, height: 1080 });
+    expect(resolutionSize("1080p", "9:16")).toEqual({ width: 1080, height: 1920 });
+    expect(resolutionSize("hd", "16:9")).toEqual({ width: 854, height: 480 });
   });
 });
