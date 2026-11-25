@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { saveStageSnapshot } from "@/lib/stageSnapshots";
 import { SendTake } from "./SendTake";
 import type { VideoModel } from "@/lib/types";
 
@@ -237,6 +238,155 @@ describe("SendTake cast image ticks", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     expect((await screen.findByText(/At most 9 reference images \(got 10\)/))).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+const priced: VideoModel = {
+  ...model,
+  id: "bytedance/seedance-2.0-mini",
+  label: "Seedance 2.0 Mini",
+  supported_durations: [4, 5, 8, 10],
+  supported_resolutions: ["720p", "480p"],
+  supported_aspect_ratios: ["16:9", "9:16"],
+  supports_audio: true,
+  token_rate: 0.0000035,
+  video_input_token_rate: 0.0000021,
+};
+
+// Independent of estimateVideoCost, so a shared pricing bug does not hide itself.
+function estimatedCost(outputSeconds: number, referenceSeconds: number): string {
+  const tokens = (480 * 854 * 24 * (outputSeconds + referenceSeconds)) / 1024;
+  return `Estimated cost: $${(tokens * 0.0000021).toFixed(2)}`;
+}
+
+function mockClip(seconds: number) {
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:take");
+  vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(seconds);
+  vi.spyOn(HTMLMediaElement.prototype, "src", "set").mockImplementation(function (this: HTMLMediaElement) {
+    queueMicrotask(() => fireEvent.loadedMetadata(this));
+  });
+}
+
+function renderTake(models: VideoModel[] = [priced], onSubmit = vi.fn()) {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]"));
+  render(<SendTake models={models} onSubmit={onSubmit} />);
+  return onSubmit;
+}
+
+async function chooseClip(name: string, type = "video/mp4") {
+  fireEvent.change(screen.getByLabelText("Take video"), {
+    target: { files: [new File(["V"], name, { type })] },
+  });
+  await waitFor(() => expect((screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement).disabled).toBe(false));
+}
+
+describe("SendTake duration and cost", () => {
+  afterEach(() => localStorage.clear());
+
+  it("bills the next duration that covers the clip, at 480p, on the video-input rate", async () => {
+    const onSubmit = renderTake();
+    mockClip(7.4);
+    await chooseClip("take.mp4");
+
+    expect((screen.getByLabelText("Take duration") as HTMLSelectElement).value).toBe("8");
+    expect((screen.getByLabelText("Take resolution") as HTMLSelectElement).value).toBe("480p");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByTestId("take-cost").textContent).toBe(estimatedCost(8, 7.4));
+    expect(screen.getByLabelText("Take preview").textContent).toContain("480p · 8 s out · 7.4 s reference");
+
+    fireEvent.change(screen.getByLabelText("Take duration"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByTestId("take-cost").textContent).toBe(estimatedCost(4, 7.4));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & generate" }));
+
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      duration: 4,
+      resolution: "480p",
+      aspect_ratio: "9:16",
+      generate_audio: true,
+    });
+  });
+
+  it("caps the billed duration at the longest option when the clip is longer", async () => {
+    renderTake();
+    mockClip(12);
+    await chooseClip("take.mp4");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect((screen.getByLabelText("Take duration") as HTMLSelectElement).value).toBe("10");
+    expect(screen.getByTestId("take-cost").textContent).toBe(estimatedCost(10, 12));
+  });
+
+  it("says the cost is unknown when the model has no token rate", async () => {
+    renderTake([model]);
+    mockClip(5);
+    await chooseClip("take.mp4");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByTestId("take-cost").textContent).toBe("Estimated cost: unknown for this model");
+  });
+
+  it("sends the model's aspect ratio when 9:16 is not offered", async () => {
+    const onSubmit = renderTake([{ ...model, supported_aspect_ratios: ["1:1"] }]);
+    mockClip(5);
+    await chooseClip("take.mp4");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & generate" }));
+    expect(onSubmit.mock.calls[0][0].aspect_ratio).toBe("1:1");
+    expect(onSubmit.mock.calls[0][0].generate_audio).toBeUndefined();
+  });
+
+  it("rewrites an empty browser file type from the extension", async () => {
+    const onSubmit = renderTake();
+    mockClip(5);
+    await chooseClip("take.MOV", "");
+    fireEvent.change(screen.getByLabelText("Voice line"), {
+      target: { files: [new File(["A"], "line.MP3", { type: "" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByLabelText("Voice line preview");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & generate" }));
+
+    const refs = onSubmit.mock.calls[0][0].input_references;
+    expect(refs[0].video_url.url).toMatch(/^data:video\/quicktime;base64,/);
+    expect(refs[1].audio_url.url).toMatch(/^data:audio\/mpeg;base64,/);
+  });
+
+  it("refuses a blank prompt and a WebM take before sending", async () => {
+    const onSubmit = renderTake();
+    mockClip(5);
+    await chooseClip("take.webm", "video/webm");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/mp4|mov/i);
+    expect(screen.queryByLabelText("Take preview")).toBeNull();
+
+    await chooseClip("take.mp4");
+    fireEvent.change(screen.getByLabelText("Take prompt"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/prompt/i);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("logs the recorded stage snapshot after the stage has changed", async () => {
+    const objects = [{ id: 1, kind: "box", position: [1, 0, 0], rotation: [0, 0, 0] }];
+    saveStageSnapshot(localStorage, 1700, objects);
+    localStorage.setItem("director-stage-layout-v3", JSON.stringify([{ id: 1, kind: "box", position: [9, 0, 0], rotation: [0, 0, 0] }]));
+    const onSubmit = renderTake([model]);
+    mockClip(5);
+    await chooseClip("stage-clip-1700.mp4");
+    expect(screen.getByText("Stage changed since this take was recorded.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & generate" }));
+    expect(onSubmit.mock.calls[0][0].stage).toEqual({ schema: "director-stage-scene/v1", objects });
+  });
+
+  it("does not attach a stage spec to a renamed clip", async () => {
+    saveStageSnapshot(localStorage, 1700, [{ id: 1, kind: "box", position: [1, 0, 0], rotation: [0, 0, 0] }]);
+    const onSubmit = renderTake([model]);
+    mockClip(5);
+    await chooseClip("my-take.mp4");
+    expect(screen.getByText("No stage spec for this clip.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & generate" }));
+    expect(onSubmit.mock.calls[0][0].stage).toBeUndefined();
   });
 });
 
