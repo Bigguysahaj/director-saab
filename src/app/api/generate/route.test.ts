@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,9 +44,20 @@ describe("POST /api/generate", () => {
   it("returns a clear error when PUBLIC_MEDIA_BASE_URL is unset and a data URL is present", async () => {
     vi.stubEnv("PUBLIC_MEDIA_BASE_URL", "");
     const res = await post(body);
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(500);
     expect((await res.json()).error).toContain("PUBLIC_MEDIA_BASE_URL");
     expect(createVideoJob).not.toHaveBeenCalled();
+    await expect(readdir(path.join(root, "takes"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("returns 500 and does not start a job when the public media URL is not https", async () => {
+    vi.stubEnv("PUBLIC_MEDIA_BASE_URL", "http://director.example");
+    const res = await post(body);
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toContain("PUBLIC_MEDIA_BASE_URL");
+    expect(createVideoJob).not.toHaveBeenCalled();
+    await expect(readdir(path.join(root, "media"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readdir(path.join(root, "takes"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("sends only https references to OpenRouter", async () => {

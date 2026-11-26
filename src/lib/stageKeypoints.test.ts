@@ -72,5 +72,10 @@ describe("projectStageKeypoints", () => {
     expect(segmentDistance(v(0, 0, 0), v(1, 0, 0), v(0, 1, 0), v(1, 1, 0))).toBeCloseTo(1);
     expect(segmentDistance(v(0, 0, 0), v(1, 0, 0), v(0.5, -1, 0.5), v(0.5, 1, 0.5))).toBeCloseTo(0.5);
     expect(segmentDistance(v(0, 0, 0), v(0, 0, 0), v(3, 4, 0), v(3, 4, 0))).toBeCloseTo(5);
+    // Parallel segments whose infinite lines are closer than their endpoints.
+    expect(segmentDistance(v(0, 0, 0), v(1, 0, 0), v(2, 1, 0), v(3, 1, 0))).toBeCloseTo(Math.hypot(1, 1));
+    expect(segmentDistance(v(2, 0, 0), v(3, 0, 0), v(0, 1, 0), v(1, 1, 0))).toBeCloseTo(Math.hypot(1, 1));
+    // A point against a segment uses the nearest endpoint, not the line.
+    expect(segmentDistance(v(0, 0, 0), v(0, 0, 0), v(1, 0, 0), v(2, 0, 0))).toBeCloseTo(1);
   });
 });

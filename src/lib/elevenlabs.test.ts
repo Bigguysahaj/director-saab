@@ -42,6 +42,30 @@ describe("elevenlabs", () => {
     expect((err as Error).message).not.toContain("sk-test-key");
   });
 
+  it("surfaces a string error detail and a non-JSON failure without the API key", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ detail: "quota exceeded" }, { status: 429 }));
+    await expect(textToSpeech("Hello", "voice-1")).rejects.toThrow(/text-to-speech failed \(429\): quota exceeded/);
+
+    fetchMock.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
+    const err = await textToSpeech("Hello", "voice-1").catch((e: Error) => e);
+    expect((err as Error).message).toBe("ElevenLabs text-to-speech failed (502)");
+    expect((err as Error).message).not.toContain("sk-test-key");
+  });
+
+  it("lists an empty voice book as none, and names a voice-list failure", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({}));
+    expect(await listVoices()).toEqual([]);
+
+    fetchMock.mockResolvedValueOnce(Response.json({ detail: { status: "system_busy" } }, { status: 500 }));
+    await expect(listVoices()).rejects.toThrow(/voice list failed \(500\): system_busy/);
+  });
+
+  it("does not call ElevenLabs to list voices without a key", async () => {
+    vi.stubEnv("ELEVENLABS_API_KEY", "");
+    await expect(listVoices()).rejects.toThrow(/ELEVENLABS_API_KEY/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("reports not configured without a key", async () => {
     vi.stubEnv("ELEVENLABS_API_KEY", "");
     expect(isElevenLabsConfigured()).toBe(false);

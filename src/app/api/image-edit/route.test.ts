@@ -43,6 +43,27 @@ describe("POST /api/image-edit", () => {
     expect(generateImage).not.toHaveBeenCalled();
   });
 
+  it("returns 502 and no image when the provider returns nothing", async () => {
+    vi.mocked(generateImage).mockResolvedValue({ data: [] });
+    const res = await post({ image, prompt: "x" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "No image returned" });
+  });
+
+  it("keeps a zero cost, and uses null when the model has no fallback price", async () => {
+    vi.mocked(generateImage).mockResolvedValue({ ...result, usage: { cost: 0 } });
+    expect(await (await post({ image, prompt: "x", model: "some/unpriced" })).json()).toMatchObject({ cost: 0 });
+    vi.mocked(generateImage).mockResolvedValue(result);
+    expect(await (await post({ image, prompt: "x", model: "some/unpriced" })).json()).toMatchObject({ cost: null });
+  });
+
+  it("hides a non-Error provider failure", async () => {
+    vi.mocked(generateImage).mockRejectedValue("nope");
+    const res = await post({ image, prompt: "x" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Image edit failed" });
+  });
+
   it("returns a provider error as 502", async () => {
     vi.mocked(generateImage).mockRejectedValue(new Error("model not found"));
     const res = await post({ image, prompt: "x", model: "nope/nope" });

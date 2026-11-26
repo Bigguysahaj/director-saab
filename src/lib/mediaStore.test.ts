@@ -161,6 +161,28 @@ describe("mediaStore R2", () => {
       .toEqual([[`${ENDPOINT}/${KEY}`, "DELETE"], [`${ENDPOINT}/proj/${SECOND}`, "DELETE"]].sort());
   });
 
+  it("does not publish a URL when R2 rejects the upload", async () => {
+    useR2();
+    fetchR2.mockResolvedValue(new Response("denied", { status: 403 }));
+    const { mediaStore } = await import("./mediaStore");
+    await expect(mediaStore().put("proj", NAME, bytes, "video/mp4")).rejects.toThrow(/R2 put failed \(403\)/);
+    expect(fetchR2).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a non-https public base before uploading, and strips a trailing slash", async () => {
+    useR2();
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "http://media.example.com");
+    const { mediaStore, MediaConfigError } = await import("./mediaStore");
+    expect(() => mediaStore()).toThrow(MediaConfigError);
+    expect(fetchR2).not.toHaveBeenCalled();
+
+    vi.stubEnv("R2_PUBLIC_BASE_URL", "https://media.example.com/");
+    expect(await mediaStore().put("proj", NAME, bytes, "video/mp4")).toEqual({
+      key: KEY,
+      url: `https://media.example.com/${KEY}`,
+    });
+  });
+
   it("partial config throws MediaConfigError naming the missing variable", async () => {
     useR2();
     vi.stubEnv("R2_SECRET_ACCESS_KEY", "");

@@ -125,6 +125,40 @@ describe("POST /api/screen-test", () => {
     expect(vi.mocked(saveScreenTest).mock.calls.map((c) => c[1])).toEqual([0.034, null]);
   });
 
+  it("returns 501 and does not call OpenRouter when its key is missing", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    const res = await post({ image: IMG, prompt: "x" });
+    expect(res.status).toBe(501);
+    expect((await res.json()).error).toContain("OPENROUTER_API_KEY");
+    expect(generateOpenRouterImage).not.toHaveBeenCalled();
+    expect(saveScreenTest).not.toHaveBeenCalled();
+  });
+
+  it("does not save a result when the provider returns no image", async () => {
+    vi.mocked(generateOpenRouterImage).mockResolvedValue({ data: [] });
+    const res = await post({ image: IMG, prompt: "x" });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/no image/i);
+    expect(saveScreenTest).not.toHaveBeenCalled();
+  });
+
+  it("keeps a zero provider cost instead of the catalog fallback", async () => {
+    vi.mocked(generateOpenRouterImage).mockResolvedValue({
+      data: [{ b64_json: "R", media_type: "image/png" }],
+      usage: { cost: 0 },
+    });
+    await post({ image: IMG, prompt: "make it night", model: GEMINI });
+    expect(vi.mocked(saveScreenTest).mock.calls[0][1]).toBe(0);
+  });
+
+  it("hides a non-Error provider failure", async () => {
+    vi.mocked(generateOpenRouterImage).mockRejectedValue("nope");
+    const res = await post({ image: IMG, prompt: "x" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Image generation failed" });
+    expect(saveScreenTest).not.toHaveBeenCalled();
+  });
+
   it("returns a provider error as 502 and saves nothing", async () => {
     vi.mocked(generateOpenRouterImage).mockRejectedValue(new Error("model not found"));
     const res = await post({ image: IMG, prompt: "x" });
