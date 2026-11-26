@@ -60,6 +60,27 @@ describe("POST /api/character-sheet", () => {
     expect(generateArkImage).not.toHaveBeenCalled();
   });
 
+  it("returns 502 when the provider returns no image", async () => {
+    vi.mocked(generateOpenRouterImage).mockResolvedValue({ data: [] });
+    const res = await post({ photo });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "No image returned" });
+  });
+
+  it("keeps a zero cost, and uses null when the model has no fallback price", async () => {
+    vi.mocked(generateOpenRouterImage).mockResolvedValue({ ...image, usage: { cost: 0 } });
+    expect(await (await post({ photo, model: "some/unpriced" })).json()).toMatchObject({ cost: 0 });
+    vi.mocked(generateOpenRouterImage).mockResolvedValue(image);
+    expect(await (await post({ photo, model: "some/unpriced" })).json()).toMatchObject({ cost: null });
+  });
+
+  it("hides a non-Error provider failure", async () => {
+    vi.mocked(generateOpenRouterImage).mockRejectedValue("nope");
+    const res = await post({ photo });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Image generation failed" });
+  });
+
   it("surfaces the provider error for an unknown model", async () => {
     vi.mocked(generateOpenRouterImage).mockRejectedValue(new Error("model not found"));
     const res = await post({ photo, model: "nope/nope" });
