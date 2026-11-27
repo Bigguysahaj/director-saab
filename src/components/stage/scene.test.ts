@@ -25,6 +25,27 @@ describe("parseScene", () => {
     }
   });
 
+  it("rejects a non-finite position and an empty layout, and keeps a switched-off fan", () => {
+    expect(() => parseScene([])).toThrow(/no objects/);
+    expect(() => parseScene(null)).toThrow(/no objects/);
+    expect(() => parseScene({ objects: [] })).toThrow(/no objects/);
+    for (const position of [[Number.NaN, 0, 0], [Infinity, 0, 0], [0, 0, "1"]]) {
+      expect(() => parseScene([{ ...camera, position }])).toThrow(/position/);
+    }
+    expect(() => parseScene([{
+      ...camera,
+      keyframes: [{ time: 1, position: [0, Number.NaN, 0], rotation: [0, 0, 0] }],
+    }])).toThrow(/keyframe/);
+    expect(() => parseScene([{
+      ...camera,
+      keyframes: [{ time: 1, position: [0, 0, 0], rotation: [0, 0, 0], pose: [] }],
+    }])).toThrow(/pose/);
+
+    const off = parseScene([{ ...wind, strength: 0, gust: false, at: 0 }, { ...camera, id: 3, keyframes: [{ time: 8, position: [0, 0, 0], rotation: [0, 0, 0] }] }]);
+    expect(off[0]).toMatchObject({ strength: 0, gust: false, at: 0 });
+    expect(off[1].keyframes?.[0].time).toBe(8);
+  });
+
   it("loads the purse-hook shot", () => {
     expect(parseScene(purseHook).some((o) => o.kind === "camera" && o.keyframes?.length)).toBe(true);
   });

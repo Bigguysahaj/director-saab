@@ -100,5 +100,25 @@ describe("castStore candidate sheets", () => {
     expect(m.candidates).toHaveLength(1);
     expect((await readMemberFile(projectId, id, m.candidates![0])).toString()).toBe("main");
   });
+
+  it("a first sheet is not also stored as a candidate", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    const saved = await updateMember(activeId, member.id, { sheetDataUrl: png("first") });
+    expect((await readMemberFile(activeId, member.id, saved.sheet!)).toString()).toBe("first");
+    expect(saved.candidates ?? []).toEqual([]);
+  });
+
+  it("promotes a candidate when there is no main sheet, without keeping an empty slot", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    const added = await updateMember(activeId, member.id, { addCandidateDataUrl: png("only") });
+    expect(added.sheet ?? null).toBeNull();
+
+    const promoted = await updateMember(activeId, member.id, { promoteCandidate: added.candidates![0] });
+    expect(promoted.sheet).toBe(added.candidates![0]);
+    expect((await readMemberFile(activeId, member.id, promoted.sheet!)).toString()).toBe("only");
+    expect(promoted.candidates).toEqual([]);
+  });
 });
 

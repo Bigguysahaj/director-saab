@@ -240,3 +240,38 @@ describe("SendTake cast image ticks", () => {
   });
 });
 
+describe("SendTake billed duration", () => {
+  const durations: VideoModel = {
+    ...model,
+    supported_durations: [4, 5, 8, 10],
+  };
+
+  async function sendClip(seconds: number) {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]"));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:take");
+    vi.spyOn(HTMLMediaElement.prototype, "duration", "get").mockReturnValue(seconds);
+    vi.spyOn(HTMLMediaElement.prototype, "src", "set").mockImplementation(function (this: HTMLMediaElement) {
+      queueMicrotask(() => fireEvent.loadedMetadata(this));
+    });
+    const onSubmit = vi.fn();
+    render(<SendTake models={[durations]} onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByLabelText("Take video"), {
+      target: { files: [new File(["V"], "take.mp4", { type: "video/mp4" })] },
+    });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement).disabled).toBe(false));
+    return onSubmit;
+  }
+
+  it.each([
+    [4.4, 4],
+    [4.6, 5],
+    [5, 5],
+  ])("bills a %ss clip at %ss, the option that the rounded length lands on", async (seconds, billed) => {
+    const onSubmit = await sendClip(seconds);
+    expect((screen.getByLabelText("Take duration") as HTMLSelectElement).value).toBe(String(billed));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm & generate" }));
+    expect(onSubmit.mock.calls[0][0].duration).toBe(billed);
+  });
+});
+
