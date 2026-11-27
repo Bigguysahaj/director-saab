@@ -85,3 +85,7 @@ text/voice control design. Those AI and animation features are not implemented.
 
 Paused work: [pose library handoff, 2026-09-25](docs/handoffs/2026-09-25-pose-library.md)
 records implementation status and the remaining browser verification.
+
+Blocking, the `director-stage-scene/v1` file, camera moves, and clip capture
+are in [stage architecture](docs/architecture/stage.md). The worked scene is
+[`docs/scenes/purse-hook.json`](docs/scenes/purse-hook.json).
