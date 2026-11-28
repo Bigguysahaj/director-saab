@@ -145,6 +145,17 @@ describe("mediaStore R2", () => {
     expect(fetchR2.mock.calls[0].slice(0, 2)).toEqual([`${ENDPOINT}/${KEY}`, "DELETE"]);
   });
 
+  it("stops when a delete is rejected and does not delete the remaining keys", async () => {
+    useR2();
+    fetchR2.mockImplementation(async (_url: string, method: string) => {
+      if (method === "GET") return listXml();
+      return new Response("denied", { status: 403 });
+    });
+    const { mediaStore } = await import("./mediaStore");
+    await expect(mediaStore().deleteAll("proj")).rejects.toThrow(/R2 delete failed \(403\)/);
+    expect(fetchR2.mock.calls.filter((call) => call[1] === "DELETE")).toHaveLength(1);
+  });
+
   it("deleteAll deletes every listed key under the project prefix", async () => {
     useR2();
     fetchR2.mockImplementation(async (_url, method) => method === "GET" ? listXml() : new Response(null));

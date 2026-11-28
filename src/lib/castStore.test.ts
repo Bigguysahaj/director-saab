@@ -41,6 +41,37 @@ describe("castStore shot model", () => {
     const [old] = await readRoster(activeId);
     expect(toClientMember(activeId, old).shots.front.model).toBeUndefined();
   });
+
+  it("keeps shots and color when renaming, and a later shot update replaces the map", async () => {
+    const { activeId } = await listProjects();
+    const member = await createMember(activeId, "Ana");
+    const image = (text: string) => `data:image/png;base64,${Buffer.from(text).toString("base64")}`;
+    await updateMember(activeId, member.id, {
+      stageColor: "#c65d3b",
+      shots: {
+        front: { image: image("front"), cost: 0.01 },
+        side: { image: image("side"), cost: 0.02 },
+      },
+    });
+
+    const renamed = await updateMember(activeId, member.id, { name: "Ananya" });
+    expect(renamed.name).toBe("Ananya");
+    expect(renamed.stageColor).toBe("#c65d3b");
+    expect((await readMemberFile(activeId, member.id, renamed.shots.front.file)).toString()).toBe("front");
+
+    const cleared = await updateMember(activeId, member.id, { stageColor: null });
+    expect(cleared.stageColor).toBeNull();
+    expect(cleared.shots.front.file).toBe(renamed.shots.front.file);
+
+    const replaced = await updateMember(activeId, member.id, {
+      shots: { close: { image: image("close"), cost: 0.03, model: "bytedance-seed/seedream-5-0-flash" } },
+    });
+    expect(Object.keys(replaced.shots)).toEqual(["close"]);
+    expect((await readMemberFile(activeId, member.id, replaced.shots.close.file)).toString()).toBe("close");
+    const [saved] = await readRoster(activeId);
+    expect(Object.keys(saved.shots)).toEqual(["close"]);
+    expect(toClientMember(activeId, saved).shots.close).toMatchObject({ cost: 0.03, model: "bytedance-seed/seedream-5-0-flash" });
+  });
 });
 
 const png = (text: string) => `data:image/png;base64,${Buffer.from(text).toString("base64")}`;

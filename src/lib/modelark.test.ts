@@ -56,4 +56,42 @@ describe("ModelArk image generation", () => {
     }, { status })));
     await expect(generateImage(request)).rejects.toThrow("InputImageSensitiveContentDetected");
   });
+
+  it("sums each returned image when the billed count matches, including a pro size over 2.6MP", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [
+        { b64_json: "BIG", size: "2048x2048" },
+        { b64_json: "SMALL", size: "1024x1024" },
+      ],
+      usage: { generated_images: 2 },
+    })));
+    await expect(generateImage({ ...request, model: "modelark/dola-seedream-5-0-pro-260628" })).resolves.toEqual({
+      data: [
+        { b64_json: "BIG", media_type: "image/jpeg" },
+        { b64_json: "SMALL", media_type: "image/jpeg" },
+      ],
+      usage: { cost: 0.135 },
+    });
+  });
+
+  it("bills the reported image count at the first image's price when Ark returns fewer images", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [
+        { b64_json: "BIG", size: "2048x2048" },
+        { b64_json: "SMALL", size: "1024x1024" },
+      ],
+      usage: { generated_images: 3 },
+    })));
+    await expect(generateImage({ ...request, model: "modelark/dola-seedream-5-0-pro-260628" })).resolves.toMatchObject({
+      usage: { cost: 0.27 },
+    });
+  });
+
+  it("rejects a batch when any image is missing its payload", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [{ b64_json: "BIG", size: "1024x1024" }, { size: "1024x1024" }],
+      usage: { generated_images: 2 },
+    })));
+    await expect(generateImage(request)).rejects.toThrow("no image");
+  });
 });

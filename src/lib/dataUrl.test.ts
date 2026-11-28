@@ -22,6 +22,12 @@ describe("parseDataUrl", () => {
   it("rejects a non-data URL", () => {
     expect(parseDataUrl("https://example.com/a.png", "jpg")).toBeNull();
   });
+
+  it("maps an uppercase MIME onto the lowercase extension", () => {
+    const parsed = parseDataUrl("data:IMAGE/JPEG;base64,cGhvdG8=", "bin");
+    expect(parsed).toMatchObject({ mime: "IMAGE/JPEG", ext: "jpg" });
+    expect(parsed?.buffer.toString()).toBe("photo");
+  });
 });
 
 describe("contentType", () => {
@@ -29,6 +35,8 @@ describe("contentType", () => {
     expect(contentType("png")).toBe("image/png");
     expect(contentType("a.jpeg")).toBe("image/jpeg");
     expect(contentType("mp4")).toBe("video/mp4");
+    expect(contentType("clip.MOV")).toBe("video/quicktime");
+    expect(contentType("photo.JPEG")).toBe("image/jpeg");
     expect(contentType("xyz")).toBe("application/octet-stream");
   });
 });
