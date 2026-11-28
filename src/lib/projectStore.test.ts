@@ -64,6 +64,15 @@ describe("projectStore", () => {
     await expect(createProject("Default")).rejects.toThrow(/already/i);
   });
 
+  it("folds punctuation and accents into one slug and rejects a name with no letters or digits", async () => {
+    const project = await createProject("  Café / Pilot!! ");
+    expect(project).toMatchObject({ id: "caf-pilot", name: "Café / Pilot!!" });
+    expect(project.id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    await expect(createProject("caf pilot")).rejects.toThrow(/already/i);
+    await expect(createProject("???")).rejects.toThrow(/name/i);
+    expect((await listProjects()).projects.map((p) => p.id)).toEqual(["default", "caf-pilot"]);
+  });
+
   it("keeps each project's cast separate", async () => {
     const { activeId: defaultId } = await listProjects();
     const gini = await createProject("Gini-first-vid");

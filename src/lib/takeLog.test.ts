@@ -112,6 +112,15 @@ describe("takeLog", () => {
     expect((await readFile(path.join(takeDir("job-done"), take.output!))).toString()).toBe("video-out");
   });
 
+  it("keeps a recorded cost when a later result omits one", async () => {
+    await logSubmittedTake({ id: "job-cost", request });
+    const fetchOutput = vi.fn(async () => new Response("video-out"));
+    await recordTakeResult("job-cost", { status: "completed", cost: 0.21 }, fetchOutput);
+    await recordTakeResult("job-cost", { status: "completed" }, fetchOutput);
+    expect(fetchOutput).toHaveBeenCalledTimes(1);
+    expect(await readTake("job-cost")).toMatchObject({ status: "completed", cost: 0.21, output: expect.stringMatching(/\.mp4$/) });
+  });
+
   it("downloads once when two completed polls arrive together", async () => {
     await logSubmittedTake({ id: "job-race", request });
     // Slow download, so both polls are past the "file exists?" check before it lands.
